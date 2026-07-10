@@ -1,0 +1,17 @@
+import { describe, expect, it } from 'vitest'
+import { initialDetectorState, reduceGoal, type GoalSpec, type LessonEvent } from '../lessons/engine'
+import type { ControlEvent, ControlKind } from '../midi/types'
+
+const event = (kind: ControlKind, index: number, value = .8, ts = 0, on = true): ControlEvent => ({ kind, index, value, ts, on, channel: 0, source: 'demo' })
+function run(goal: GoalSpec, events: LessonEvent[]) { let state = initialDetectorState(); let result = { state, progress: 0, done: false }; events.forEach((item) => { result = reduceGoal(goal, result.state, item) }); return result }
+
+describe('lesson goal detectors', () => {
+  it('event matches kind, index, and velocity bounds', () => { const goal: GoalSpec = { type: 'event', match: { kind: 'pad', index: 2, minVelocity: .5 } }; expect(run(goal, [event('pad', 2, .4)]).done).toBe(false); expect(run(goal, [event('pad', 2, .7)]).done).toBe(true) })
+  it('count advances only matching attacks', () => { const result = run({ type: 'count', match: { kind: 'key' }, n: 2 }, [event('pad', 0), event('key', 60), event('key', 60, 0, 2, false), event('key', 62)]); expect(result.done).toBe(true); expect(result.progress).toBe(1) })
+  it('sweep tracks cumulative range, regardless of direction', () => { const result = run({ type: 'sweep', index: 1, span: .9 }, [event('knob', 1, .96), event('knob', 1, .04)]); expect(result.done).toBe(true) })
+  it('sequence resets on a miss and accepts pitches in any octave', () => { const goal: GoalSpec = { type: 'notes', notes: [0, 2, 4], mode: 'sequence', anyOctave: true }; expect(run(goal, [event('key', 60), event('key', 62), event('key', 64)]).done).toBe(true); expect(run(goal, [event('key', 60), event('key', 63)]).progress).toBe(0) })
+  it('chord requires all notes inside its time window', () => { const goal: GoalSpec = { type: 'notes', notes: [0, 4, 7], mode: 'chord', anyOctave: true, windowMs: 80 }; expect(run(goal, [event('key', 60, .7, 100), event('key', 64, .7, 150), event('key', 67, .7, 175)]).done).toBe(true); expect(run(goal, [event('key', 60, .7, 0), event('key', 64, .7, 100), event('key', 67, .7, 110)]).done).toBe(false) })
+  it('timing counts only target-pad hits near requested beats', () => { const goal: GoalSpec = { type: 'timing', beats: [0, 2], padIndex: 0, bpm: 60, toleranceMs: 100, hits: 2 }; const result = run(goal, [event('pad', 0, 1, 30), event('pad', 0, 1, 2010)]); expect(result.done).toBe(true); expect(run(goal, [event('pad', 0, 1, 500)]).progress).toBe(0) })
+  it('calibrate counts each pad or knob once', () => { const padEvents = Array.from({ length: 8 }, (_, i) => event('pad', i)); expect(run({ type: 'calibrate', target: 'pads' }, [padEvents[0]!, padEvents[0]!, ...padEvents.slice(1)]).done).toBe(true); const knobs = Array.from({ length: 8 }, (_, i) => event('knob', i)); expect(run({ type: 'calibrate', target: 'knobs' }, knobs).done).toBe(true) })
+  it('pattern recognizes the taught kick, snare, and hat grid', () => { const grid = Array.from({ length: 8 }, () => Array(16).fill(false) as boolean[]); [0,8].forEach((i) => grid[0]![i] = true); [4,12].forEach((i) => grid[1]![i] = true); [0,2,4,6,8,10,12,14].forEach((i) => grid[2]![i] = true); expect(run({ type: 'pattern', check: 'firstBeat' }, [{ kind: 'pattern', grid, ts: 0 }]).done).toBe(true) })
+})
