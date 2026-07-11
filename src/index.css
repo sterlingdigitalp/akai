@@ -41,7 +41,8 @@ body {
     var(--bg);
 }
 button,
-input {
+input,
+textarea {
   font: inherit;
 }
 button {
@@ -49,6 +50,7 @@ button {
 }
 button:focus-visible,
 input:focus-visible,
+textarea:focus-visible,
 summary:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 3px;
@@ -767,6 +769,45 @@ details[open] summary:before {
   margin: 0;
   color: var(--muted);
   font-size: 14px;
+}
+.data-card {
+  align-items: flex-start;
+}
+.data-copy {
+  flex: 1;
+}
+.setting-card .data-message {
+  margin-top: 14px;
+  color: var(--accent);
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.import-details {
+  margin-top: 10px;
+  color: var(--muted);
+}
+.import-form {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  padding-top: 8px;
+}
+.import-form label {
+  font-size: 12px;
+}
+.import-form textarea {
+  width: min(560px, 100%);
+  min-height: 150px;
+  resize: vertical;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  color: var(--text);
+  background: hsl(20 15% 6%);
+  font-family: ui-monospace, monospace;
+  font-size: 12px;
+  line-height: 1.5;
 }
 .setting-actions,
 .confirm-row {

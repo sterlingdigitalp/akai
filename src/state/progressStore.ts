@@ -1,5 +1,6 @@
 import { create } from 'zustand'
-import { persist } from 'zustand/middleware'
+import { createJSONStorage, persist } from 'zustand/middleware'
+import { woodshedStorage } from './storage'
 
 export type LessonProgress = { completedSteps: string[]; completedAt?: string }
 type ProgressState = {
@@ -23,4 +24,4 @@ export const useProgressStore = create<ProgressState>()(persist((set) => ({
     return { lessons: { ...s.lessons, [lessonId]: { completedSteps, completedAt: isLast ? new Date().toISOString() : prior.completedAt } }, practiceDays: s.practiceDays.includes(day) ? s.practiceDays : [...s.practiceDays, day] }
   }),
   reset: () => set({ lessons: {}, practiceDays: [] }),
-}), { name: 'woodshed.progress.v1' }))
+}), { name: 'woodshed.progress.v1', storage: createJSONStorage(() => woodshedStorage) }))

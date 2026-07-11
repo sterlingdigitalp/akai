@@ -1,5 +1,6 @@
 import { parseMidi, type ParsedMidiMessage } from './parser'
 import { classify } from './profile'
+import { isTauri, restoreTauriMidiConnection, startTauriMidi } from './tauri'
 import type { ControlEvent } from './types'
 import { useMidiStore } from '../state/midiStore'
 import { useProfileStore } from '../state/profileStore'
@@ -20,7 +21,10 @@ export const subscribeRawMidi = (subscriber: RawSubscriber) => { rawSubscribers.
 
 function receive(message: MIDIMessageEvent) {
   if (!message.data) return
-  const bytes = Array.from(message.data)
+  receiveMidiBytes(Array.from(message.data))
+}
+
+export function receiveMidiBytes(bytes: number[]) {
   const parsed = parseMidi(bytes)
   if (!parsed) return
   rawSubscribers.forEach((subscriber) => subscriber(parsed, bytes))
@@ -49,6 +53,7 @@ function syncInputs() {
 }
 
 export async function startMidi() {
+  if (isTauri()) { await startTauriMidi(receiveMidiBytes); return }
   if (!navigator.requestMIDIAccess) { useMidiStore.getState().setConnection('unsupported'); return }
   try {
     access = await navigator.requestMIDIAccess()
@@ -59,6 +64,10 @@ export async function startMidi() {
 
 export function setDemoMode(enabled: boolean) {
   if (enabled) useMidiStore.getState().setConnection('demo', 'On-screen MPK')
+  else if (isTauri()) {
+    useMidiStore.getState().setConnection('no-device')
+    restoreTauriMidiConnection()
+  }
   else if (!navigator.requestMIDIAccess) useMidiStore.getState().setConnection('unsupported')
   else { useMidiStore.getState().setConnection('no-device'); syncInputs() }
 }
