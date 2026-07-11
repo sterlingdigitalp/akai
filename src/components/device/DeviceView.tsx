@@ -9,11 +9,11 @@ const VIEWBOX_HEIGHT = 600
 const WHEEL_TRAVEL_TOP = 101
 const WHEEL_TRAVEL_BOTTOM = 166
 const PAD_FUNCTION_BUTTONS = [
-  { lines: ['ARP'], subLabel: 'CONFIG' },
-  { lines: ['LATCH'], subLabel: 'FULL LEVEL' },
-  { lines: ['NOTE', 'REPEAT'], subLabel: 'CONFIG' },
-  { lines: ['TAP', 'TEMPO'], subLabel: 'METRONOME' },
-  { lines: ['BANK', 'A/B'], color: '#c2554f' },
+  { id: 'arp', lines: ['ARP'], subLabel: 'CONFIG' },
+  { id: 'latch', lines: ['LATCH'], subLabel: 'FULL LEVEL' },
+  { id: 'note-repeat', lines: ['NOTE', 'REPEAT'], subLabel: 'CONFIG' },
+  { id: 'tap', lines: ['TAP', 'TEMPO'], subLabel: 'METRONOME' },
+  { id: 'bank', lines: ['BANK', 'A/B'], color: '#c2554f' },
 ]
 const PAD_PANEL_LABELS = [
   [
@@ -40,7 +40,7 @@ const ARP_LEGEND = [
 ]
 const isBlack = (note: number) => BLACKS.has(((note % 12) + 12) % 12)
 
-export function DeviceView({ compact = false }: { compact?: boolean }) {
+export function DeviceView({ compact = false, highlight }: { compact?: boolean; highlight?: string }) {
   const held = useMidiStore((state) => state.heldKeys)
   const knobs = useMidiStore((state) => state.knobValues)
   const flash = useMidiStore((state) => state.padFlash)
@@ -191,14 +191,15 @@ export function DeviceView({ compact = false }: { compact?: boolean }) {
           </g>
 
           <g>
-            {PAD_FUNCTION_BUTTONS.map(({ lines, subLabel, color }, index) => {
+            {PAD_FUNCTION_BUTTONS.map(({ id, lines, subLabel, color }, index) => {
               const x = 205 + index * 76
-              return <g key={lines.join('-')}>
+              return <g id={`function-${id}`} key={id} data-function-id={id}>
                 <rect x={x} y="266" width="66" height="30" rx="6" fill="#1a1819" stroke="#4b4647"/>
                 <text x={x + 33} y={lines.length === 1 ? 284.5 : 279.5} textAnchor="middle" fill={color ?? '#777173'} fontSize="8.5" fontWeight="600" letterSpacing=".55">
                   {lines.map((line, lineIndex) => <tspan key={line} x={x + 33} dy={lineIndex === 0 ? 0 : 9.5}>{line}</tspan>)}
                 </text>
                 {subLabel && <text x={x + 33} y="310" textAnchor="middle" fill="#5d5859" fontSize="7.5" letterSpacing=".65">{subLabel}</text>}
+                {highlight === id && <rect className="function-highlight" x={x - 4} y="262" width="74" height="38" rx="10"/>}
               </g>
             })}
           </g>

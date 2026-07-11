@@ -57,11 +57,30 @@
 .is-compact .device-help {
   display: none;
 }
+.function-highlight {
+  fill: none;
+  stroke: #ef493f;
+  stroke-width: 2px;
+  opacity: 0.7;
+  filter: drop-shadow(0 0 5px rgb(239 73 63 / 0.8));
+}
 @media (prefers-reduced-motion: no-preference) {
   .svg-pad {
     transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
   }
   .svg-pad.is-hit {
     transform: scale(1.08);
+  }
+  .function-highlight {
+    transform-box: fill-box;
+    transform-origin: center;
+    animation: function-highlight-pulse 1.8s ease-in-out infinite;
+  }
+  @keyframes function-highlight-pulse {
+    50% {
+      opacity: 1;
+      stroke-width: 3px;
+      transform: scale(1.04);
+    }
   }
 }

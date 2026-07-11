@@ -6,14 +6,15 @@ export type GoalSpec =
   | { type: 'count'; match: EventMatch; n: number }
   | { type: 'sweep'; index: number; span: number }
   | { type: 'notes'; notes: number[]; mode: 'sequence' | 'chord'; anyOctave?: boolean; windowMs?: number }
+  | { type: 'stream'; n: number; withinMs: number; minSpan?: number; direction?: 'down'; denser?: true }
   | { type: 'timing'; beats: number[]; padIndex: number; bpm: number; toleranceMs: number; hits: number }
   | { type: 'calibrate'; target: 'pads' | 'knobs' }
   | { type: 'pattern'; check: 'firstBeat' }
 
-export type LessonStep = { id: string; title: string; instruction: string; hint?: string; goal: GoalSpec; recap?: string[] }
+export type LessonStep = { id: string; title: string; instruction: string; hint?: string; goal: GoalSpec; recap?: string[]; highlight?: 'arp' | 'latch' | 'tap' }
 export type PatternEvent = { kind: 'pattern'; grid: boolean[][]; ts: number }
 export type LessonEvent = ControlEvent | PatternEvent
-export type DetectorState = { count: number; progress: number; done: boolean; min: number; max: number; sequence: number[]; times: number[]; captured: number[] }
+export type DetectorState = { count: number; progress: number; done: boolean; min: number; max: number; sequence: number[]; times: number[]; captured: number[]; baselineMedian?: number }
 export const initialDetectorState = (): DetectorState => ({ count: 0, progress: 0, done: false, min: 1, max: 0, sequence: [], times: [], captured: [] })
 
 function matches(event: LessonEvent, match: EventMatch) {
@@ -21,6 +22,11 @@ function matches(event: LessonEvent, match: EventMatch) {
   return (match.index === undefined || event.index === match.index) && (match.minVelocity === undefined || event.value >= match.minVelocity) && (match.maxVelocity === undefined || event.value <= match.maxVelocity) && (match.deviation === undefined || Math.abs(event.value - .5) >= match.deviation)
 }
 const pitch = (note: number, anyOctave?: boolean) => anyOctave ? ((note % 12) + 12) % 12 : note
+const median = (values: number[]) => {
+  const sorted = [...values].sort((a, b) => a - b)
+  const middle = Math.floor(sorted.length / 2)
+  return sorted.length % 2 === 0 ? ((sorted[middle - 1] ?? 0) + (sorted[middle] ?? 0)) / 2 : (sorted[middle] ?? 0)
+}
 
 export function reduceGoal(goal: GoalSpec, state: DetectorState, event: LessonEvent): { state: DetectorState; progress: number; done: boolean } {
   if (state.done) return { state, progress: 1, done: true }
@@ -43,6 +49,34 @@ export function reduceGoal(goal: GoalSpec, state: DetectorState, event: LessonEv
       pairs.push({ note: heard, time: event.ts }); const unique = new Set(pairs.map((item) => item.note)); const count = wanted.filter((note) => unique.has(note)).length
       next = { ...next, sequence: pairs.map((item) => item.note), times: pairs.map((item) => item.time), count, progress: count / wanted.length, done: count >= wanted.length }
     }
+  } else if (goal.type === 'stream' && event.kind === 'key' && event.on !== false) {
+    const cutoff = event.ts - goal.withinMs
+    const pairs = next.sequence
+      .map((note, index) => ({ note, time: next.times[index] ?? 0 }))
+      .filter((item) => item.time >= cutoff && item.time <= event.ts)
+    pairs.push({ note: event.index, time: event.ts })
+    const notes = pairs.map((item) => item.note)
+    const times = pairs.map((item) => item.time)
+    const intervals = times.slice(1).map((time, index) => time - (times[index] ?? time))
+    const medianInterval = median(intervals)
+    const meanInterval = intervals.reduce((sum, interval) => sum + interval, 0) / (intervals.length || 1)
+    const variance = intervals.reduce((sum, interval) => sum + (interval - meanInterval) ** 2, 0) / (intervals.length || 1)
+    const coefficientOfVariation = meanInterval > 0 ? Math.sqrt(variance) / meanInterval : Infinity
+    const baseDone = notes.length >= goal.n && medianInterval >= 100 && medianInterval <= 500 && coefficientOfVariation < .4
+    const hasExtraCriterion = goal.minSpan !== undefined || goal.direction !== undefined || goal.denser === true
+    let baselineMedian = next.baselineMedian
+    let denserDone = goal.denser !== true
+    if (goal.denser && baseDone) {
+      if (baselineMedian === undefined) baselineMedian = medianInterval
+      else denserDone = medianInterval <= baselineMedian / 1.6
+    }
+    const spanDone = goal.minSpan === undefined || Math.max(...notes) - Math.min(...notes) >= goal.minSpan
+    const descendingPairs = notes.slice(1).filter((note, index) => note < (notes[index] ?? note)).length
+    const directionDone = goal.direction === undefined || descendingPairs / Math.max(1, notes.length - 1) >= .6
+    const extraDone = baseDone && spanDone && directionDone && denserDone
+    const baseProgress = Math.min(1, notes.length / goal.n)
+    const progress = hasExtraCriterion ? (extraDone ? 1 : baseProgress * .5) : baseProgress
+    next = { ...next, sequence: notes, times, count: notes.length, progress, done: hasExtraCriterion ? extraDone : baseDone, baselineMedian }
   } else if (goal.type === 'timing' && event.kind === 'pad' && event.index === goal.padIndex && event.on !== false) {
     const beatMs = 60000 / goal.bpm; const barMs = beatMs * 4; const phase = ((event.ts % barMs) + barMs) % barMs
     const nearest = Math.min(...goal.beats.map((beat) => Math.abs(phase - beat * beatMs)), ...goal.beats.map((beat) => Math.abs(phase - (beat * beatMs + barMs))))

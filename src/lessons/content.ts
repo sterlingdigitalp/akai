@@ -39,6 +39,14 @@ export const LESSONS: Lesson[] = [
     { id: 'delay', title: 'Send it into space', instruction: 'Sweep knob 4. Delay repeats a little echo of what you played.', goal: { type: 'sweep', index: 3, span: .9 } },
     recap('sound-recap', 'You shaped a synth voice', ['Filter changes brightness.', 'Release changes the fade.', 'Delay turns one note into an echo.']),
   ]},
+  { id: 'arp', number: '05', title: 'Set it in motion', eyebrow: 'Real hardware', description: 'Your MPK has a pattern engine built in. Wake it up and steer it.', minutes: 12, steps: [
+    { id: 'arp-on', title: 'Wake the arpeggiator', instruction: 'Hold the ARP button, then press and hold a three-note chord. Your MPK rolls those notes into a pattern.', hint: 'The arp only runs while you hold the notes. Latch will free your hands in the next move.', highlight: 'arp', goal: { type: 'stream', n: 10, withinMs: 3000 } },
+    { id: 'arp-latch', title: 'Let go and let it run', instruction: 'While the arp rolls, tap LATCH, then release the keys. The pattern should keep moving without your hand on the chord.', highlight: 'latch', goal: { type: 'stream', n: 16, withinMs: 6000 } },
+    { id: 'arp-oct', title: 'Stretch it across octaves', instruction: 'Hold ARP and tap the key printed OCT 2, then hold your chord again. Find OCT 2 in the legend strip above the keys — on screen and on your hardware.', highlight: 'arp', goal: { type: 'stream', n: 10, withinMs: 4000, minSpan: 13 } },
+    { id: 'arp-down', title: 'Turn it around', instruction: 'Hold ARP and choose the key printed DOWN, then listen as the pattern falls through your chord.', highlight: 'arp', goal: { type: 'stream', n: 10, withinMs: 4000, direction: 'down' } },
+    { id: 'arp-denser', title: 'Double the density', instruction: 'Hold ARP and pick a smaller division with the printed division keys — move from 1/8 to 1/16 and hear the notes pack closer together.', highlight: 'arp', goal: { type: 'stream', n: 10, withinMs: 3000, denser: true } },
+    recap('arp-recap', 'You set a chord in motion', ['An arpeggio is a chord set in motion.', 'Latch frees your hands.', 'Octaves, direction, and division shape the pattern.']),
+  ]},
 ]
 
 export const getLesson = (id: string | null) => LESSONS.find((lesson) => lesson.id === id) ?? LESSONS[0]
