@@ -1,6 +1,6 @@
 import type { ControlEvent, ControlKind } from '../midi/types'
 
-export type EventMatch = { kind: ControlKind; index?: number; minVelocity?: number; maxVelocity?: number }
+export type EventMatch = { kind: ControlKind; index?: number; minVelocity?: number; maxVelocity?: number; deviation?: number }
 export type GoalSpec =
   | { type: 'event'; match: EventMatch }
   | { type: 'count'; match: EventMatch; n: number }
@@ -18,7 +18,7 @@ export const initialDetectorState = (): DetectorState => ({ count: 0, progress: 
 
 function matches(event: LessonEvent, match: EventMatch) {
   if (event.kind === 'pattern' || event.kind !== match.kind || ('on' in event && event.on === false)) return false
-  return (match.index === undefined || event.index === match.index) && (match.minVelocity === undefined || event.value >= match.minVelocity) && (match.maxVelocity === undefined || event.value <= match.maxVelocity)
+  return (match.index === undefined || event.index === match.index) && (match.minVelocity === undefined || event.value >= match.minVelocity) && (match.maxVelocity === undefined || event.value <= match.maxVelocity) && (match.deviation === undefined || Math.abs(event.value - .5) >= match.deviation)
 }
 const pitch = (note: number, anyOctave?: boolean) => anyOctave ? ((note % 12) + 12) % 12 : note
 

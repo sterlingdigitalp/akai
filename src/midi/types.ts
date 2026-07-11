@@ -1,4 +1,4 @@
-export type ControlKind = 'key' | 'pad' | 'knob' | 'joyX' | 'joyY'
+export type ControlKind = 'key' | 'pad' | 'knob' | 'pitch' | 'mod'
 
 export type ControlEvent = {
   kind: ControlKind

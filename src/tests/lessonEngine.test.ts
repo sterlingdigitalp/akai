@@ -7,6 +7,7 @@ function run(goal: GoalSpec, events: LessonEvent[]) { let state = initialDetecto
 
 describe('lesson goal detectors', () => {
   it('event matches kind, index, and velocity bounds', () => { const goal: GoalSpec = { type: 'event', match: { kind: 'pad', index: 2, minVelocity: .5 } }; expect(run(goal, [event('pad', 2, .4)]).done).toBe(false); expect(run(goal, [event('pad', 2, .7)]).done).toBe(true) })
+  it('event deviation matches movement away from the pitch-wheel center', () => { const goal: GoalSpec = { type: 'event', match: { kind: 'pitch', deviation: .15 } }; expect(run(goal, [event('pitch', 0, .5)]).done).toBe(false); expect(run(goal, [event('pitch', 0, .64)]).done).toBe(false); expect(run(goal, [event('pitch', 0, .66)]).done).toBe(true) })
   it('count advances only matching attacks', () => { const result = run({ type: 'count', match: { kind: 'key' }, n: 2 }, [event('pad', 0), event('key', 60), event('key', 60, 0, 2, false), event('key', 62)]); expect(result.done).toBe(true); expect(result.progress).toBe(1) })
   it('sweep tracks cumulative range, regardless of direction', () => { const result = run({ type: 'sweep', index: 1, span: .9 }, [event('knob', 1, .96), event('knob', 1, .04)]); expect(result.done).toBe(true) })
   it('sequence resets on a miss and accepts pitches in any octave', () => { const goal: GoalSpec = { type: 'notes', notes: [0, 2, 4], mode: 'sequence', anyOctave: true }; expect(run(goal, [event('key', 60), event('key', 62), event('key', 64)]).done).toBe(true); expect(run(goal, [event('key', 60), event('key', 63)]).progress).toBe(0) })

@@ -8,13 +8,13 @@ type MidiState = {
   heldKeys: Set<number>
   knobValues: number[]
   padFlash: { index: number; velocity: number; ts: number } | null
-  joy: { x: number; y: number }
+  wheels: { pitch: number; mod: number }
   setConnection: (status: MidiStatus, deviceName?: string) => void
   receive: (event: ControlEvent) => void
 }
 
 export const useMidiStore = create<MidiState>((set) => ({
-  status: 'no-device', deviceName: '', heldKeys: new Set(), knobValues: Array(8).fill(0.5), padFlash: null, joy: { x: 0.5, y: 0.5 },
+  status: 'no-device', deviceName: '', heldKeys: new Set(), knobValues: Array(8).fill(0.5), padFlash: null, wheels: { pitch: 0.5, mod: 0 },
   setConnection: (status, deviceName = '') => set({ status, deviceName }),
   receive: (event) => set((state) => {
     if (event.kind === 'key') {
@@ -24,8 +24,8 @@ export const useMidiStore = create<MidiState>((set) => ({
     }
     if (event.kind === 'pad') return event.on === false ? { padFlash: null } : { padFlash: { index: event.index, velocity: event.value, ts: event.ts } }
     if (event.kind === 'knob') { const knobValues = [...state.knobValues]; knobValues[event.index] = event.value; return { knobValues } }
-    if (event.kind === 'joyX') return { joy: { ...state.joy, x: event.value } }
-    if (event.kind === 'joyY') return { joy: { ...state.joy, y: event.value } }
+    if (event.kind === 'pitch') return { wheels: { ...state.wheels, pitch: event.value } }
+    if (event.kind === 'mod') return { wheels: { ...state.wheels, mod: event.value } }
     return {}
   }),
 }))

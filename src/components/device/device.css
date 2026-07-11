@@ -33,7 +33,8 @@
 }
 .svg-key,
 .svg-pad,
-.svg-knob {
+.svg-knob,
+.svg-wheel {
   cursor: pointer;
   outline: none;
 }
@@ -41,6 +42,7 @@
   filter: brightness(0.93);
 }
 .svg-knob:focus circle,
+.svg-wheel:focus > rect:first-child,
 .svg-pad:focus rect,
 .svg-key:focus {
   stroke: var(--accent);

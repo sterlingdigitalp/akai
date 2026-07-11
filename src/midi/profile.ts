@@ -6,8 +6,8 @@ export type DeviceProfile = {
   padChannel: number
   knobCCs: number[]
   keyChannel: number
-  joyXIsPitchBend: boolean
-  joyYCC: number
+  pitchIsBend: boolean
+  modCC: number
 }
 
 export const DEFAULT_PROFILE: DeviceProfile = {
@@ -15,8 +15,8 @@ export const DEFAULT_PROFILE: DeviceProfile = {
   padChannel: 9,
   knobCCs: [70, 71, 72, 73, 74, 75, 76, 77],
   keyChannel: 0,
-  joyXIsPitchBend: true,
-  joyYCC: 1,
+  pitchIsBend: true,
+  modCC: 1,
 }
 
 export function classify(message: ParsedMidiMessage, profile: DeviceProfile, ts = performance.now()): ControlEvent | null {
@@ -28,8 +28,8 @@ export function classify(message: ParsedMidiMessage, profile: DeviceProfile, ts 
   if (message.type === 'cc') {
     const knob = profile.knobCCs.indexOf(message.controller)
     if (knob >= 0) return { kind: 'knob', index: knob, value: message.value / 127, channel: message.channel, ts, source: 'hardware' }
-    if (message.controller === profile.joyYCC) return { kind: 'joyY', index: 0, value: message.value / 127, channel: message.channel, ts, source: 'hardware' }
+    if (message.controller === profile.modCC) return { kind: 'mod', index: 0, value: message.value / 127, channel: message.channel, ts, source: 'hardware' }
   }
-  if (message.type === 'pitchBend' && profile.joyXIsPitchBend) return { kind: 'joyX', index: 0, value: message.value / 16383, channel: message.channel, ts, source: 'hardware' }
+  if (message.type === 'pitchBend' && profile.pitchIsBend) return { kind: 'pitch', index: 0, value: message.value / 16383, channel: message.channel, ts, source: 'hardware' }
   return null
 }

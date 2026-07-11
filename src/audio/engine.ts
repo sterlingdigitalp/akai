@@ -3,8 +3,9 @@ let master: GainNode | null = null
 let delay: DelayNode | null = null
 let feedback: GainNode | null = null
 let delayInput: GainNode | null = null
+let lfo: OscillatorNode | null = null
 
-export type AudioEngine = { context: AudioContext; master: GainNode; delayInput: GainNode }
+export type AudioEngine = { context: AudioContext; master: GainNode; delayInput: GainNode; lfo: OscillatorNode }
 export function getEngine(): AudioEngine {
   if (!context) {
     context = new AudioContext()
@@ -18,15 +19,18 @@ export function getEngine(): AudioEngine {
     feedback = context.createGain()
     feedback.gain.value = 0.28
     delayInput = context.createGain()
+    lfo = context.createOscillator()
+    lfo.frequency.value = 5.5
+    lfo.start()
     delayInput.connect(delay)
     delay.connect(feedback)
     feedback.connect(delay)
     delay.connect(master)
     master.connect(compressor).connect(context.destination)
-    return { context, master, delayInput }
+    return { context, master, delayInput, lfo }
   }
   if (context.state === 'suspended') void context.resume()
-  return { context, master: master!, delayInput: delayInput! }
+  return { context, master: master!, delayInput: delayInput!, lfo: lfo! }
 }
 
 export function connectDelaySend(source: AudioNode, amount: number) {
