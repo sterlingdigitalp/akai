@@ -15,6 +15,24 @@ const PAD_FUNCTION_BUTTONS = [
   { lines: ['TAP', 'TEMPO'], subLabel: 'METRONOME' },
   { lines: ['BANK', 'A/B'], color: '#c2554f' },
 ]
+const PAD_PANEL_LABELS = [
+  [
+    { number: '5', label: 'CHORDS' },
+    { number: '6', label: 'CHORDS CONFIG' },
+    { number: '7', label: 'SCALES' },
+    { number: '8', label: 'SCALES CONFIG' },
+  ],
+  [
+    { number: '1', label: '' },
+    { number: '2', label: 'PROG CHNG' },
+    { number: '3', label: 'CC#' },
+    { number: '4', label: 'NOTES' },
+  ],
+]
+const KNOB_PANEL_LABELS = [
+  'DIVISION', 'SWING', 'MODE', 'OCT',
+  'LATCH', 'SYNC', 'GATE', 'BPM',
+]
 const ARP_LEGEND = [
   '1/4', '1/4 T', '1/8', '1/8 T', '1/16', '1/16 T', '1/32', '1/32 T',
   'UP', 'DOWN', 'EXCL', 'INCL', 'ORDER', 'RAND', 'CHORD', 'OCT 1', 'OCT 2',
@@ -78,6 +96,38 @@ export function DeviceView({ compact = false }: { compact?: boolean }) {
         <text x="47" y="61" fill="#ef493f" fontSize="27" fontWeight="700" letterSpacing="-1">AKAI</text>
         <text x="116" y="61" fill="#aaa3a4" fontSize="13" letterSpacing="2">professional</text>
 
+        <g className="panel-trim" aria-hidden="true" pointerEvents="none" fill="none" stroke="#4a1a17" strokeWidth="1" opacity=".8">
+          <rect x="194" y="49" width="402" height="208" rx="13"/>
+          <rect x="194" y="260" width="392" height="62" rx="9"/>
+          <rect x="790" y="56" width="432" height="194" rx="13"/>
+          <rect x="856" y="258" width="302" height="62" rx="9"/>
+          <rect x="43" y="210" width="127" height="42" rx="9"/>
+          <rect x="615" y="291" width="173" height="51" rx="9"/>
+        </g>
+
+        <g className="panel-print" aria-hidden="true" pointerEvents="none">
+          <text x="619" y="61" fontSize="17" letterSpacing="-.35">
+            <tspan fill="#d8d2cf" fontWeight="750">MPK</tspan>
+            <tspan dx="4" fill="#a8a2a3" fontSize="15" fontWeight="400">mini</tspan>
+          </text>
+
+          {PAD_PANEL_LABELS.map((row, rowIndex) => row.map(({ number, label }, column) => (
+            <text key={`${number}-${label}`} x={205 + column * 99} y={rowIndex === 0 ? 70 : 250} fill="#6b6667" fontSize="8.5" letterSpacing=".2">
+              <tspan fill="#8b8586" fontWeight="750">{number}</tspan>
+              {label && <tspan dx="3" fontWeight="500">{label}</tspan>}
+            </text>
+          )))}
+
+          {KNOB_PANEL_LABELS.map((label, index) => {
+            const x = 866 + (index % 4) * 94
+            const y = 103 + Math.floor(index / 4) * 102
+            return <text key={label} x={x} y={y + 43} textAnchor="middle" fill="#6b6667" fontSize="7.5" letterSpacing=".3">
+              <tspan fill="#8b8586" fontWeight="750">{index + 1}</tspan>
+              <tspan dx="3" fontWeight="500">{label}</tspan>
+            </text>
+          })}
+        </g>
+
         {([
           { kind: 'pitch' as const, x: 53, value: wheels.pitch, label: 'PITCH' },
           { kind: 'mod' as const, x: 113, value: wheels.mod, label: 'MOD' },
@@ -106,7 +156,6 @@ export function DeviceView({ compact = false }: { compact?: boolean }) {
           const velocity = active ? flash.velocity : 0
           return <g key={`pad-${index}`} className={active ? 'svg-pad is-hit' : 'svg-pad'} style={{ transformOrigin: `${x + 41}px ${y + 36}px` }} onPointerDown={(event) => { event.currentTarget.setPointerCapture(event.pointerId); demoControl('pad', index, .82, true) }} onPointerUp={() => demoControl('pad', index, 0, false)} role="button" aria-label={`Pad ${index + 1}`} tabIndex={0}>
             <rect x={x} y={y} width="82" height="72" rx="11" fill={active ? `hsl(${6 + velocity * 30} 90% ${46 + velocity * 12}%)` : '#1d1b1c'} stroke={active ? '#ffaf3f' : '#4c4748'} strokeWidth="2" filter={active ? 'url(#padGlow)' : undefined}/>
-            <text x={x + 41} y={y + 43} textAnchor="middle" fill={active ? '#180b04' : '#777173'} fontSize="16" fontWeight="700">{index + 1}</text>
           </g>
         })}
 
@@ -132,7 +181,6 @@ export function DeviceView({ compact = false }: { compact?: boolean }) {
             <circle cx={x} cy={y} r="26" fill="#0b0a0a" stroke="#474243" strokeWidth="3"/>
             <path d={`M ${x + Math.cos(-135 * Math.PI / 180) * 33} ${y + Math.sin(-135 * Math.PI / 180) * 33} A 33 33 0 ${value > .67 ? 1 : 0} 1 ${x + Math.cos(radians) * 33} ${y + Math.sin(radians) * 33}`} fill="none" stroke="#ef493f" strokeWidth="4" strokeLinecap="round"/>
             <line x1={x} y1={y} x2={x + Math.cos(radians) * 18} y2={y + Math.sin(radians) * 18} stroke="#eee8e1" strokeWidth="3" strokeLinecap="round"/>
-            <text x={x} y={y + 43} textAnchor="middle" fill="#777173" fontSize="11">{index + 1}</text>
           </g>
         })}
 
@@ -197,6 +245,8 @@ export function DeviceView({ compact = false }: { compact?: boolean }) {
             <text x="865" y="326" fontSize="6.5" letterSpacing="1">ARP</text>
           </g>
         </g>
+
+        <line className="keybed-pinstripe" x1="9" x2="1271" y1="349" y2="349" stroke="#7c2420" strokeWidth="2" aria-hidden="true" pointerEvents="none"/>
 
         <g className="keys">
           {whites.map((note, index) => <rect key={note} x={47 + index * 79} y="352" width="77" height="215" rx={3} fill={held.has(note) ? '#ffae43' : '#e8e3dc'} stroke="#181617" strokeWidth="2" className="svg-key" onPointerDown={(event) => { event.currentTarget.setPointerCapture(event.pointerId); demoControl('key', note, .72, true) }} onPointerUp={() => demoControl('key', note, 0, false)} role="button" aria-label="Piano key" tabIndex={0}/>) }
