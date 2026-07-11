@@ -5,9 +5,21 @@ import { useMidiStore } from '../../state/midiStore'
 import './device.css'
 
 const BLACKS = new Set([1, 3, 6, 8, 10])
-const VIEWBOX_HEIGHT = 520
+const VIEWBOX_HEIGHT = 600
 const WHEEL_TRAVEL_TOP = 101
 const WHEEL_TRAVEL_BOTTOM = 166
+const PAD_FUNCTION_BUTTONS = [
+  { lines: ['ARP'], subLabel: 'CONFIG' },
+  { lines: ['LATCH'], subLabel: 'FULL LEVEL' },
+  { lines: ['NOTE', 'REPEAT'], subLabel: 'CONFIG' },
+  { lines: ['TAP', 'TEMPO'], subLabel: 'METRONOME' },
+  { lines: ['BANK', 'A/B'], color: '#c2554f' },
+]
+const ARP_LEGEND = [
+  '1/4', '1/4 T', '1/8', '1/8 T', '1/16', '1/16 T', '1/32', '1/32 T',
+  'UP', 'DOWN', 'EXCL', 'INCL', 'ORDER', 'RAND', 'CHORD', 'OCT 1', 'OCT 2',
+  'OCT 3', 'OCT 4', 'SWING', 'PATTERN', 'EDIT', 'MUTATE', 'FREEZE', 'SYNC',
+]
 const isBlack = (note: number) => BLACKS.has(((note % 12) + 12) % 12)
 
 export function DeviceView({ compact = false }: { compact?: boolean }) {
@@ -54,14 +66,14 @@ export function DeviceView({ compact = false }: { compact?: boolean }) {
   return (
     <div className={`device-wrap ${compact ? 'is-compact' : ''}`}>
       <div className="device-caption"><span>MPK mini</span><span className="device-caption-model">PLAYABLE SURFACE</span></div>
-      <svg className="device" viewBox="0 0 1280 520" role="group" aria-label="Interactive on-screen MPK Mini keyboard">
+      <svg className="device" viewBox="0 0 1280 600" role="group" aria-label="Interactive on-screen MPK Mini keyboard">
         <defs>
           <linearGradient id="body" x1="0" y1="0" x2="0" y2="1"><stop stopColor="#282526"/><stop offset="1" stopColor="#151314"/></linearGradient>
           <linearGradient id="wheel" x1="0" y1="0" x2="1" y2="0"><stop stopColor="#171516"/><stop offset=".5" stopColor="#454142"/><stop offset="1" stopColor="#111011"/></linearGradient>
           <radialGradient id="browse" cx="40%" cy="34%"><stop stopColor="#454142"/><stop offset=".72" stopColor="#1b191a"/><stop offset="1" stopColor="#0b0a0a"/></radialGradient>
           <filter id="padGlow"><feGaussianBlur stdDeviation="10" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
         </defs>
-        <rect x="8" y="8" width="1264" height="504" rx="30" fill="url(#body)" stroke="#3a3536" strokeWidth="2"/>
+        <rect x="8" y="8" width="1264" height="584" rx="30" fill="url(#body)" stroke="#3a3536" strokeWidth="2"/>
         <path d="M30 32h1220" stroke="rgba(255,255,255,.08)"/>
         <text x="47" y="61" fill="#ef493f" fontSize="27" fontWeight="700" letterSpacing="-1">AKAI</text>
         <text x="116" y="61" fill="#aaa3a4" fontSize="13" letterSpacing="2">professional</text>
@@ -124,11 +136,73 @@ export function DeviceView({ compact = false }: { compact?: boolean }) {
           </g>
         })}
 
+        <g className="function-band" aria-hidden="true" pointerEvents="none">
+          <g fill="#5d5859" fontSize="7.5" letterSpacing=".7" textAnchor="middle">
+            <text x="76.5" y="257">PROG EDIT</text>
+            <text x="136.5" y="257">SAVE</text>
+          </g>
+
+          <g>
+            {PAD_FUNCTION_BUTTONS.map(({ lines, subLabel, color }, index) => {
+              const x = 205 + index * 76
+              return <g key={lines.join('-')}>
+                <rect x={x} y="266" width="66" height="30" rx="6" fill="#1a1819" stroke="#4b4647"/>
+                <text x={x + 33} y={lines.length === 1 ? 284.5 : 279.5} textAnchor="middle" fill={color ?? '#777173'} fontSize="8.5" fontWeight="600" letterSpacing=".55">
+                  {lines.map((line, lineIndex) => <tspan key={line} x={x + 33} dy={lineIndex === 0 ? 0 : 9.5}>{line}</tspan>)}
+                </text>
+                {subLabel && <text x={x + 33} y="310" textAnchor="middle" fill="#5d5859" fontSize="7.5" letterSpacing=".65">{subLabel}</text>}
+              </g>
+            })}
+          </g>
+
+          <g>
+            <text x="702" y="260" textAnchor="middle" fill="#777173" fontSize="8" letterSpacing="1.1">&lt; BANK &gt;</text>
+            <rect x="663" y="266" width="34" height="24" rx="5" fill="#1a1819" stroke="#4b4647"/>
+            <rect x="707" y="266" width="34" height="24" rx="5" fill="#1a1819" stroke="#4b4647"/>
+            <text x="680" y="282" textAnchor="middle" fill="#777173" fontSize="13">−</text>
+            <text x="724" y="282" textAnchor="middle" fill="#777173" fontSize="13">+</text>
+
+            <rect x="625" y="298" width="72" height="26" rx="5" fill="#1a1819" stroke="#4b4647"/>
+            <rect x="707" y="298" width="72" height="26" rx="5" fill="#1a1819" stroke="#4b4647"/>
+            <rect x="643" y="305" width="36" height="12" rx="1.5" fill="none" stroke="#777173" strokeWidth=".8"/>
+            <text x="661" y="314" textAnchor="middle" fill="#777173" fontSize="7" letterSpacing=".5">SHIFT</text>
+            <text x="743" y="308.5" textAnchor="middle" fill="#c2554f" fontSize="7.5" fontWeight="600" letterSpacing=".35">
+              <tspan x="743">PLUGIN/</tspan>
+              <tspan x="743" dy="8.5">DAW</tspan>
+            </text>
+            <text x="702" y="335" textAnchor="middle" fill="#5d5859" fontSize="7.5" letterSpacing=".7">USER PRESETS</text>
+          </g>
+
+          <g>
+            {[866, 924, 982, 1040, 1098].map((x) => <rect key={x} x={x} y="266" width="48" height="30" rx="6" fill="#1a1819" stroke="#4b4647"/>)}
+            <text x="890" y="284.5" textAnchor="middle" fill="#777173" fontSize="8" fontWeight="600" letterSpacing=".45">UNDO</text>
+
+            <path d="M937 278.5v-1.5a5 5 0 0 1 5-5h13a5 5 0 0 1 5 5v7a5 5 0 0 1-5 5h-14a5 5 0 0 1-5-5" fill="none" stroke="#777173" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+            <path d="m934 279 3-3 3 3" fill="none" stroke="#777173" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+
+            <rect x="994" y="277" width="7" height="7" rx=".7" fill="#777173"/>
+            <path d="m1008 276 10 5-10 5z" fill="#777173"/>
+
+            <circle cx="1064" cy="281" r="6" fill="#a33a35"/>
+
+            <circle cx="1122" cy="281" r="9" fill="none" stroke="#777173" strokeWidth="1.3"/>
+            <path d="M1117.5 281h9M1122 276.5v9" stroke="#777173" strokeWidth="1.3" strokeLinecap="round"/>
+
+            {['REDO', 'GLOBAL', 'CONTINUE', 'QUANTIZE', 'AUTOMATION'].map((label, index) => <text key={label} x={890 + index * 58} y="310" textAnchor="middle" fill="#5d5859" fontSize="7.5" letterSpacing=".55">{label}</text>)}
+          </g>
+
+          <g fill="#565152" fontSize="7.5" letterSpacing=".5" textAnchor="middle">
+            {ARP_LEGEND.map((label, index) => <text key={label} x={53 + index * 48.8} y="344">{label}</text>)}
+            <path d="M777 329h176" fill="none" stroke="#565152" strokeWidth=".8"/>
+            <text x="865" y="326" fontSize="6.5" letterSpacing="1">ARP</text>
+          </g>
+        </g>
+
         <g className="keys">
-          {whites.map((note, index) => <rect key={note} x={47 + index * 79} y="272" width="77" height="215" rx={3} fill={held.has(note) ? '#ffae43' : '#e8e3dc'} stroke="#181617" strokeWidth="2" className="svg-key" onPointerDown={(event) => { event.currentTarget.setPointerCapture(event.pointerId); demoControl('key', note, .72, true) }} onPointerUp={() => demoControl('key', note, 0, false)} role="button" aria-label="Piano key" tabIndex={0}/>) }
+          {whites.map((note, index) => <rect key={note} x={47 + index * 79} y="352" width="77" height="215" rx={3} fill={held.has(note) ? '#ffae43' : '#e8e3dc'} stroke="#181617" strokeWidth="2" className="svg-key" onPointerDown={(event) => { event.currentTarget.setPointerCapture(event.pointerId); demoControl('key', note, .72, true) }} onPointerUp={() => demoControl('key', note, 0, false)} role="button" aria-label="Piano key" tabIndex={0}/>) }
           {blackNotes.map((note) => {
             const prior = whiteIndexBefore(note)
-            return <rect key={note} x={47 + prior * 79 - 25} y="272" width="50" height="133" rx={2.5} fill={held.has(note) ? '#d94339' : '#151314'} stroke="#050505" strokeWidth="2" className="svg-key black" onPointerDown={(event) => { event.currentTarget.setPointerCapture(event.pointerId); demoControl('key', note, .72, true) }} onPointerUp={() => demoControl('key', note, 0, false)} role="button" aria-label="Black piano key" tabIndex={0}/>
+            return <rect key={note} x={47 + prior * 79 - 25} y="352" width="50" height="133" rx={2.5} fill={held.has(note) ? '#d94339' : '#151314'} stroke="#050505" strokeWidth="2" className="svg-key black" onPointerDown={(event) => { event.currentTarget.setPointerCapture(event.pointerId); demoControl('key', note, .72, true) }} onPointerUp={() => demoControl('key', note, 0, false)} role="button" aria-label="Black piano key" tabIndex={0}/>
           })}
         </g>
       </svg>
