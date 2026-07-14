@@ -156,6 +156,7 @@ export function DeviceView({ compact = false, highlight }: { compact?: boolean; 
           const velocity = active ? flash.velocity : 0
           return <g key={`pad-${index}`} className={active ? 'svg-pad is-hit' : 'svg-pad'} style={{ transformOrigin: `${x + 41}px ${y + 36}px` }} onPointerDown={(event) => { event.currentTarget.setPointerCapture(event.pointerId); demoControl('pad', index, .82, true) }} onPointerUp={() => demoControl('pad', index, 0, false)} role="button" aria-label={`Pad ${index + 1}`} tabIndex={0}>
             <rect x={x} y={y} width="82" height="72" rx="11" fill={active ? `hsl(${6 + velocity * 30} 90% ${46 + velocity * 12}%)` : '#1d1b1c'} stroke={active ? '#ffaf3f' : '#4c4748'} strokeWidth="2" filter={active ? 'url(#padGlow)' : undefined}/>
+            {((highlight === 'chords' && index === 4) || (highlight === 'scales' && index === 6)) && <rect className="function-highlight" x={x - 4} y={y - 4} width="90" height="80" rx="13"/>}
           </g>
         })}
 

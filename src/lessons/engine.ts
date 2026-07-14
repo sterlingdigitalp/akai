@@ -10,12 +10,18 @@ export type GoalSpec =
   | { type: 'timing'; beats: number[]; padIndex: number; bpm: number; toleranceMs: number; hits: number }
   | { type: 'calibrate'; target: 'pads' | 'knobs' }
   | { type: 'pattern'; check: 'firstBeat' }
+  | { type: 'chordmode'; minClusters: number; minVoices: number; rootSpan?: number; windowMs?: number; clusterMs?: number }
+  | { type: 'scalefit'; minNotes: number; minSpan: number; maxClasses: number; withinMs?: number }
+  | { type: 'repeat'; n: number; withinMs: number; denser?: true }
+  | { type: 'dynamics'; kind: 'pad' | 'key'; minHits: number; spread: number }
+  | { type: 'groovemix'; streamN: number; otherHits: number; withinMs: number }
+  | { type: 'confirm' }
 
-export type LessonStep = { id: string; title: string; instruction: string; hint?: string; goal: GoalSpec; recap?: string[]; highlight?: 'arp' | 'latch' | 'tap' }
+export type LessonStep = { id: string; title: string; instruction: string; hint?: string; goal: GoalSpec; recap?: string[]; highlight?: 'arp' | 'latch' | 'tap' | 'note-repeat' | 'chords' | 'scales'; confirm?: string }
 export type PatternEvent = { kind: 'pattern'; grid: boolean[][]; ts: number }
 export type LessonEvent = ControlEvent | PatternEvent
-export type DetectorState = { count: number; progress: number; done: boolean; min: number; max: number; sequence: number[]; times: number[]; captured: number[]; baselineMedian?: number }
-export const initialDetectorState = (): DetectorState => ({ count: 0, progress: 0, done: false, min: 1, max: 0, sequence: [], times: [], captured: [] })
+export type DetectorState = { count: number; progress: number; done: boolean; min: number; max: number; sequence: number[]; times: number[]; captured: number[]; baselineMedian?: number; values: number[] }
+export const initialDetectorState = (): DetectorState => ({ count: 0, progress: 0, done: false, min: 1, max: 0, sequence: [], times: [], captured: [], values: [] })
 
 function matches(event: LessonEvent, match: EventMatch) {
   if (event.kind === 'pattern' || event.kind !== match.kind || ('on' in event && event.on === false)) return false
@@ -27,10 +33,18 @@ const median = (values: number[]) => {
   const middle = Math.floor(sorted.length / 2)
   return sorted.length % 2 === 0 ? ((sorted[middle - 1] ?? 0) + (sorted[middle] ?? 0)) / 2 : (sorted[middle] ?? 0)
 }
+const intervalStats = (times: number[]) => {
+  const intervals = times.slice(1).map((time, index) => time - (times[index] ?? time))
+  const medianInterval = median(intervals)
+  const meanInterval = intervals.reduce((sum, interval) => sum + interval, 0) / (intervals.length || 1)
+  const variance = intervals.reduce((sum, interval) => sum + (interval - meanInterval) ** 2, 0) / (intervals.length || 1)
+  const coefficientOfVariation = meanInterval > 0 ? Math.sqrt(variance) / meanInterval : Infinity
+  return { medianInterval, coefficientOfVariation }
+}
 
 export function reduceGoal(goal: GoalSpec, state: DetectorState, event: LessonEvent): { state: DetectorState; progress: number; done: boolean } {
   if (state.done) return { state, progress: 1, done: true }
-  let next = { ...state, sequence: [...state.sequence], times: [...state.times], captured: [...state.captured] }
+  let next = { ...state, sequence: [...state.sequence], times: [...state.times], captured: [...state.captured], values: [...state.values] }
   if (goal.type === 'event') {
     if (matches(event, goal.match)) next = { ...next, count: 1, progress: 1, done: true }
   } else if (goal.type === 'count') {
@@ -57,11 +71,7 @@ export function reduceGoal(goal: GoalSpec, state: DetectorState, event: LessonEv
     pairs.push({ note: event.index, time: event.ts })
     const notes = pairs.map((item) => item.note)
     const times = pairs.map((item) => item.time)
-    const intervals = times.slice(1).map((time, index) => time - (times[index] ?? time))
-    const medianInterval = median(intervals)
-    const meanInterval = intervals.reduce((sum, interval) => sum + interval, 0) / (intervals.length || 1)
-    const variance = intervals.reduce((sum, interval) => sum + (interval - meanInterval) ** 2, 0) / (intervals.length || 1)
-    const coefficientOfVariation = meanInterval > 0 ? Math.sqrt(variance) / meanInterval : Infinity
+    const { medianInterval, coefficientOfVariation } = intervalStats(times)
     const baseDone = notes.length >= goal.n && medianInterval >= 100 && medianInterval <= 500 && coefficientOfVariation < .4
     const hasExtraCriterion = goal.minSpan !== undefined || goal.direction !== undefined || goal.denser === true
     let baselineMedian = next.baselineMedian
@@ -87,6 +97,66 @@ export function reduceGoal(goal: GoalSpec, state: DetectorState, event: LessonEv
   } else if (goal.type === 'pattern' && event.kind === 'pattern') {
     const good = [0, 8].every((s) => event.grid[0]?.[s]) && [4, 12].every((s) => event.grid[1]?.[s]) && [0, 2, 4, 6, 8, 10, 12, 14].every((s) => event.grid[2]?.[s])
     next = { ...next, progress: good ? 1 : 0, done: good }
+  } else if (goal.type === 'chordmode' && event.kind === 'key' && event.on !== false) {
+    const windowMs = goal.windowMs ?? 8000; const clusterMs = goal.clusterMs ?? 25
+    const cutoff = event.ts - windowMs
+    const pairs = next.sequence.map((note, index) => ({ note, time: next.times[index] ?? 0 })).filter((item) => item.time >= cutoff)
+    pairs.push({ note: event.index, time: event.ts }); pairs.sort((a, b) => a.time - b.time)
+    const clusters: { note: number; time: number }[][] = []
+    pairs.forEach((item) => { const last = clusters[clusters.length - 1]; if (last && item.time - last[0]!.time <= clusterMs) last.push(item); else clusters.push([item]) })
+    const validClusters = clusters.filter((cluster) => new Set(cluster.map((item) => item.note)).size >= goal.minVoices)
+    const roots = validClusters.map((cluster) => Math.min(...cluster.map((item) => item.note)))
+    const rootSpanOK = goal.rootSpan === undefined || Math.max(...roots) - Math.min(...roots) >= goal.rootSpan
+    const done = validClusters.length >= goal.minClusters && rootSpanOK
+    const progress = rootSpanOK ? Math.min(1, validClusters.length / goal.minClusters) : Math.min(.8, validClusters.length / goal.minClusters)
+    next = { ...next, sequence: pairs.map((item) => item.note), times: pairs.map((item) => item.time), count: validClusters.length, progress, done }
+  } else if (goal.type === 'scalefit' && event.kind === 'key' && event.on !== false) {
+    const cutoff = goal.withinMs === undefined ? -Infinity : event.ts - goal.withinMs
+    const pairs = next.sequence.map((note, index) => ({ note, time: next.times[index] ?? 0 })).filter((item) => item.time >= cutoff)
+    pairs.push({ note: event.index, time: event.ts })
+    const notes = pairs.map((item) => item.note)
+    const classes = new Set(notes.map((note) => ((note % 12) + 12) % 12)).size
+    const span = Math.max(...notes) - Math.min(...notes)
+    const done = notes.length >= goal.minNotes && span >= goal.minSpan && classes <= goal.maxClasses
+    const raw = Math.min(1, notes.length / goal.minNotes) * (span >= goal.minSpan ? 1 : .7)
+    const progress = done ? 1 : classes <= goal.maxClasses ? raw : Math.min(.8, raw)
+    next = { ...next, sequence: notes, times: pairs.map((item) => item.time), count: notes.length, progress, done }
+  } else if (goal.type === 'repeat' && event.kind === 'pad' && event.on !== false) {
+    const cutoff = event.ts - goal.withinMs
+    const pairs = next.sequence.map((note, index) => ({ note, time: next.times[index] ?? 0 })).filter((item) => item.time >= cutoff)
+    pairs.push({ note: event.index, time: event.ts })
+    const counts = new Map<number, number>(); pairs.forEach((item) => counts.set(item.note, (counts.get(item.note) ?? 0) + 1))
+    let target = pairs[0]!.note; counts.forEach((count, note) => { if (count > (counts.get(target) ?? 0)) target = note })
+    const targetTimes = pairs.filter((item) => item.note === target).map((item) => item.time).sort((a, b) => a - b)
+    const { medianInterval, coefficientOfVariation } = intervalStats(targetTimes)
+    const steady = targetTimes.length >= goal.n && medianInterval >= 50 && medianInterval <= 360 && coefficientOfVariation < .4
+    let baselineMedian = next.baselineMedian; let denserDone = goal.denser !== true
+    if (goal.denser && steady) { if (baselineMedian === undefined) baselineMedian = medianInterval; else denserDone = medianInterval <= baselineMedian / 1.6 }
+    const done = steady && (goal.denser ? denserDone : true)
+    const base = Math.min(1, targetTimes.length / goal.n)
+    const progress = done ? 1 : (goal.denser ? base * .5 : base)
+    next = { ...next, sequence: pairs.map((item) => item.note), times: pairs.map((item) => item.time), count: targetTimes.length, progress, done, baselineMedian }
+  } else if (goal.type === 'dynamics' && event.kind === goal.kind && event.on !== false) {
+    next.values.push(event.value)
+    const hits = next.values.length; const range = Math.max(...next.values) - Math.min(...next.values)
+    const done = hits >= goal.minHits && range >= goal.spread
+    const progress = Math.min(1, Math.min(hits / goal.minHits, range / goal.spread))
+    next = { ...next, progress, done }
+  } else if (goal.type === 'groovemix' && event.kind === 'pad' && event.on !== false) {
+    const cutoff = event.ts - goal.withinMs
+    const pairs = next.sequence.map((note, index) => ({ note, time: next.times[index] ?? 0 })).filter((item) => item.time >= cutoff)
+    pairs.push({ note: event.index, time: event.ts })
+    const counts = new Map<number, number>(); pairs.forEach((item) => counts.set(item.note, (counts.get(item.note) ?? 0) + 1))
+    let candidate = pairs[0]!.note; counts.forEach((count, note) => { if (count > (counts.get(candidate) ?? 0)) candidate = note })
+    const candidateTimes = pairs.filter((item) => item.note === candidate).map((item) => item.time).sort((a, b) => a - b)
+    const { medianInterval, coefficientOfVariation } = intervalStats(candidateTimes)
+    const hasStream = candidateTimes.length >= goal.streamN && medianInterval >= 50 && medianInterval <= 400 && coefficientOfVariation < .45
+    const others = pairs.filter((item) => item.note !== candidate)
+    const done = hasStream && others.length >= goal.otherHits
+    const progress = Math.min(1, (hasStream ? .5 : 0) + Math.min(others.length / goal.otherHits, 1) * .5)
+    next = { ...next, sequence: pairs.map((item) => item.note), times: pairs.map((item) => item.time), count: candidateTimes.length, progress, done }
+  } else if (goal.type === 'confirm') {
+    return { state, progress: state.progress, done: false }
   }
   return { state: next, progress: next.progress, done: next.done }
 }
