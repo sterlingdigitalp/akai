@@ -741,6 +741,92 @@ details[open] summary:before {
   border-radius: 50%;
   background: var(--primary);
 }
+.takes-transport {
+  align-items: center;
+}
+.record-button {
+  min-width: 168px;
+  gap: 14px;
+}
+.record-button.is-recording {
+  background: var(--accent);
+}
+.record-timer {
+  font-family: var(--display);
+  font-variant-numeric: tabular-nums;
+}
+.takes-empty {
+  min-height: 300px;
+  padding: 40px;
+  border: 1px solid var(--border);
+  border-radius: var(--card-radius);
+  background: var(--card);
+}
+.takes-empty .lead {
+  max-width: 480px;
+}
+.takes-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0 0 24px;
+  padding: 0;
+  list-style: none;
+}
+.take-row {
+  display: grid;
+  grid-template-columns: 1fr auto auto auto auto;
+  align-items: center;
+  gap: 22px;
+  padding: 16px 22px;
+  border: 1px solid var(--border);
+  border-radius: var(--card-radius);
+  background: var(--card);
+}
+.take-name {
+  justify-self: start;
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 650;
+  text-decoration-color: var(--border);
+}
+.take-name:hover {
+  color: var(--text);
+  text-decoration-color: var(--muted);
+}
+.take-name-input {
+  min-height: 36px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--card-2);
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 650;
+}
+.take-date {
+  color: var(--muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+.take-duration {
+  color: var(--muted);
+  font-family: var(--display);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.take-play {
+  min-height: 38px;
+  padding: 0 16px;
+  white-space: nowrap;
+}
+.take-delete {
+  white-space: nowrap;
+}
+.take-row:hover {
+  border-color: hsl(4 50% 35%);
+}
 .settings {
   max-width: 960px;
   margin: auto;
@@ -903,6 +989,17 @@ details[open] summary:before {
   }
   .particles {
     animation: particles 0.8s ease-out both;
+  }
+  .take-row {
+    transition: border-color 0.2s;
+  }
+  .record-button.is-recording {
+    animation: record-pulse 1.6s ease-in-out infinite;
+  }
+  @keyframes record-pulse {
+    50% {
+      filter: brightness(1.12);
+    }
   }
   @keyframes card-in {
     from {

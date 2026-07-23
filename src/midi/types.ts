@@ -7,5 +7,5 @@ export type ControlEvent = {
   on?: boolean
   channel: number
   ts: number
-  source: 'hardware' | 'demo'
+  source: 'hardware' | 'demo' | 'replay'
 }

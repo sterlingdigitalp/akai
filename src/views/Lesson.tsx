@@ -24,6 +24,7 @@ export function LessonView() {
   useEffect(() => { window.scrollTo({ top: 0 }) }, [lesson.id])
   useEffect(() => { const next = initialDetectorState(); setDetector(next); detectorRef.current = next; setJustDone(false) }, [index, lesson.id])
   const handleEvent = useCallback((event: Parameters<typeof reduceGoal>[2]) => {
+    if ('source' in event && event.source === 'replay') return
     const result = reduceGoal(step.goal, detectorRef.current, event); detectorRef.current = result.state; setDetector(result.state)
     if (result.done && !saved?.completedSteps.includes(step.id)) { completeStep(lesson.id, step.id, index === lesson.steps.length - 1); setJustDone(true) }
   }, [step, saved, completeStep, lesson.id, index, lesson.steps.length])
