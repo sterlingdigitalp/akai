@@ -84,6 +84,12 @@ describe('lesson path content', () => {
         const seconds = goal.withinMs / 1000
         if (goal.keys !== undefined && goal.keys / seconds > 1) offenders.push(`${step.id}: mix keys needs ${(goal.keys / seconds).toFixed(2)} events/sec`)
         if (goal.pads !== undefined && goal.pads / seconds > 1) offenders.push(`${step.id}: mix pads needs ${(goal.pads / seconds).toFixed(2)} events/sec`)
+      } else if (goal.type === 'overlay') {
+        const rate = goal.otherHits / (goal.withinMs / 1000)
+        if (rate > 1) offenders.push(`${step.id}: overlay needs ${rate.toFixed(2)} events/sec`)
+      } else if (goal.type === 'doubles') {
+        const rate = goal.minHits / (goal.withinMs / 1000)
+        if (rate > 1) offenders.push(`${step.id}: doubles needs ${rate.toFixed(2)} hits/sec`)
       }
     }))
     expect(offenders, offenders.join('; ')).toEqual([])

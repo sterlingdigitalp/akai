@@ -19,9 +19,20 @@ export const DEFAULT_PROFILE: DeviceProfile = {
   modCC: 1,
 }
 
+// Pads on banks B-D send notes above the mapped bank, so fold them back onto the eight
+// on-screen pads rather than dropping them and leaving the user with a dead controller.
+function padIndex(note: number, padNotes: number[]) {
+  const direct = padNotes.indexOf(note)
+  if (direct >= 0) return direct
+  const base = padNotes[0]
+  if (base === undefined) return -1
+  const offset = note - base
+  return offset > 0 && offset < 32 ? offset % 8 : -1
+}
+
 export function classify(message: ParsedMidiMessage, profile: DeviceProfile, ts = performance.now()): ControlEvent | null {
   if (message.type === 'noteOn' || message.type === 'noteOff') {
-    const pad = message.channel === profile.padChannel ? profile.padNotes.indexOf(message.note) : -1
+    const pad = message.channel === profile.padChannel ? padIndex(message.note, profile.padNotes) : -1
     if (pad >= 0) return { kind: 'pad', index: pad, value: message.velocity / 127, on: message.type === 'noteOn', channel: message.channel, ts, source: 'hardware' }
     if (message.channel === profile.keyChannel) return { kind: 'key', index: message.note, value: message.velocity / 127, on: message.type === 'noteOn', channel: message.channel, ts, source: 'hardware' }
   }

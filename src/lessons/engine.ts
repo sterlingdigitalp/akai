@@ -22,12 +22,15 @@ export type GoalSpec =
   | { type: 'density'; kind: 'pad' | 'key'; minHits: number; ratio: number; withinMs: number }
   | { type: 'controlrange'; kind: 'knob' | 'pitch' | 'mod'; index?: number; span: number }
   | { type: 'mix'; withinMs: number; keys?: number; pads?: number; knobs?: number; keySpan?: number; controlSpan?: number; pitch?: true; mod?: true }
+  | { type: 'overlay'; streamKind: 'key' | 'pad'; streamN: number; otherHits: number; withinMs: number }
+  | { type: 'doubles'; kind: 'pad' | 'key'; minDoubles: number; maxGapMs: number; minHits: number; minMedianGapMs: number; withinMs: number }
+  | { type: 'gesture'; kind: 'knob'; index?: number; span: number; returnRatio: number }
   | { type: 'confirm' }
 
 export type LessonStep = { id: string; title: string; instruction: string; hint?: string; goal: GoalSpec; recap?: string[]; highlight?: 'arp' | 'latch' | 'tap' | 'note-repeat' | 'chords' | 'scales' | 'pitch' | 'mod'; confirm?: string }
 export type PatternEvent = { kind: 'pattern'; grid: boolean[][]; ts: number }
 export type LessonEvent = ControlEvent | PatternEvent
-type CapturedControl = Pick<ControlEvent, 'kind' | 'index' | 'value' | 'ts'>
+export type CapturedControl = Pick<ControlEvent, 'kind' | 'index' | 'value' | 'ts'>
 export type DetectorState = { count: number; progress: number; done: boolean; min: number; max: number; sequence: number[]; times: number[]; captured: number[]; baselineMedian?: number; values: number[]; events: CapturedControl[] }
 export const initialDetectorState = (): DetectorState => ({ count: 0, progress: 0, done: false, min: 1, max: 0, sequence: [], times: [], captured: [], values: [], events: [] })
 
@@ -48,6 +51,59 @@ const intervalStats = (times: number[]) => {
   const variance = intervals.reduce((sum, interval) => sum + (interval - meanInterval) ** 2, 0) / (intervals.length || 1)
   const coefficientOfVariation = meanInterval > 0 ? Math.sqrt(variance) / meanInterval : Infinity
   return { medianInterval, coefficientOfVariation }
+}
+const rise = (values: number[]) => { let low = values[0] ?? 0; let best = 0; values.forEach((v) => { low = Math.min(low, v); best = Math.max(best, v - low) }); return best }
+const fall = (values: number[]) => { let high = values[0] ?? 0; let best = 0; values.forEach((v) => { high = Math.max(high, v); best = Math.max(best, high - v) }); return best }
+
+export type MixGoal = Extract<GoalSpec, { type: 'mix' }>
+export type MixPart = { id: 'keys' | 'pads' | 'knobs' | 'keySpan' | 'pitch' | 'mod'; label: string; have: number; need: number; unit: 'hits' | 'knobs' | 'semitones' | 'percent'; ratio: number; met: boolean; lastTs: number | null }
+
+export function mixParts(goal: MixGoal, events: CapturedControl[], now: number): MixPart[] {
+  const cutoff = now - goal.withinMs
+  const inWindow = events.filter((item) => item.ts >= cutoff)
+  const controlSpan = goal.controlSpan ?? .25
+  const spanFor = (kind: CapturedControl['kind'], index?: number) => {
+    const values = inWindow.filter((item) => item.kind === kind && (index === undefined || item.index === index)).map((item) => item.value)
+    return values.length ? Math.max(...values) - Math.min(...values) : 0
+  }
+  const lastTsFor = (predicate: (item: CapturedControl) => boolean) => {
+    const matching = inWindow.filter(predicate)
+    return matching.length ? Math.max(...matching.map((item) => item.ts)) : null
+  }
+  const parts: MixPart[] = []
+  if (goal.keys !== undefined) {
+    const have = inWindow.filter((item) => item.kind === 'key').length; const need = goal.keys; const met = have >= need
+    parts.push({ id: 'keys', label: 'Keys', have, need, unit: 'hits', ratio: met ? 1 : Math.min(.99, have / need), met, lastTs: lastTsFor((item) => item.kind === 'key') })
+  }
+  if (goal.pads !== undefined) {
+    const have = inWindow.filter((item) => item.kind === 'pad').length; const need = goal.pads; const met = have >= need
+    parts.push({ id: 'pads', label: 'Pads', have, need, unit: 'hits', ratio: met ? 1 : Math.min(.99, have / need), met, lastTs: lastTsFor((item) => item.kind === 'pad') })
+  }
+  if (goal.knobs !== undefined) {
+    const knobIndices = [...new Set(inWindow.filter((item) => item.kind === 'knob').map((item) => item.index))]
+    const spans = knobIndices.map((index) => spanFor('knob', index))
+    const movedKnobs = spans.filter((span) => span >= controlSpan).length
+    const subThreshold = spans.filter((span) => span < controlSpan)
+    const bestSubThresholdSpan = subThreshold.length ? Math.max(...subThreshold) : 0
+    const need = goal.knobs; const met = movedKnobs >= need
+    const raw = (movedKnobs + bestSubThresholdSpan / controlSpan) / need
+    parts.push({ id: 'knobs', label: 'Knobs moved', have: movedKnobs, need, unit: 'knobs', ratio: met ? 1 : Math.min(.99, raw), met, lastTs: lastTsFor((item) => item.kind === 'knob') })
+  }
+  if (goal.keySpan !== undefined) {
+    const keyEvents = inWindow.filter((item) => item.kind === 'key')
+    const have = keyEvents.length ? Math.max(...keyEvents.map((item) => item.index)) - Math.min(...keyEvents.map((item) => item.index)) : 0
+    const need = goal.keySpan; const met = have >= need
+    parts.push({ id: 'keySpan', label: 'Keyboard range', have, need, unit: 'semitones', ratio: met ? 1 : Math.min(.99, have / need), met, lastTs: lastTsFor((item) => item.kind === 'key') })
+  }
+  if (goal.pitch !== undefined) {
+    const span = spanFor('pitch'); const need = Math.round(controlSpan * 100); const met = span >= controlSpan
+    parts.push({ id: 'pitch', label: 'Pitch wheel', have: Math.round(span * 100), need, unit: 'percent', ratio: met ? 1 : Math.min(.99, span / controlSpan), met, lastTs: lastTsFor((item) => item.kind === 'pitch') })
+  }
+  if (goal.mod !== undefined) {
+    const span = spanFor('mod'); const need = Math.round(controlSpan * 100); const met = span >= controlSpan
+    parts.push({ id: 'mod', label: 'Mod wheel', have: Math.round(span * 100), need, unit: 'percent', ratio: met ? 1 : Math.min(.99, span / controlSpan), met, lastTs: lastTsFor((item) => item.kind === 'mod') })
+  }
+  return parts
 }
 
 export function reduceGoal(goal: GoalSpec, state: DetectorState, event: LessonEvent): { state: DetectorState; progress: number; done: boolean } {
@@ -238,26 +294,62 @@ export function reduceGoal(goal: GoalSpec, state: DetectorState, event: LessonEv
     const isControl = event.kind === 'knob' || event.kind === 'pitch' || event.kind === 'mod'
     const lastSame = isControl ? [...events].reverse().find((item) => item.kind === event.kind && item.index === event.index) : undefined
     if (!lastSame || Math.abs(lastSame.value - event.value) >= .01) events.push({ kind: event.kind, index: event.index, value: event.value, ts: event.ts })
-    const keyEvents = events.filter((item) => item.kind === 'key')
-    const padEvents = events.filter((item) => item.kind === 'pad')
-    const spanFor = (kind: CapturedControl['kind'], index?: number) => {
-      const values = events.filter((item) => item.kind === kind && (index === undefined || item.index === index)).map((item) => item.value)
-      return values.length ? Math.max(...values) - Math.min(...values) : 0
+    const keyCount = events.filter((item) => item.kind === 'key').length
+    const padCount = events.filter((item) => item.kind === 'pad').length
+    const parts = mixParts(goal, events, event.ts)
+    const progress = parts.length ? Math.min(1, ...parts.map((part) => part.ratio)) : 0
+    next = { ...next, events, count: keyCount + padCount, progress, done: parts.length > 0 && parts.every((part) => part.met) }
+  } else if (goal.type === 'overlay' && (event.kind === 'key' || event.kind === 'pad') && event.on !== false) {
+    const cutoff = event.ts - goal.withinMs
+    const events = [...next.events.filter((item) => item.ts >= cutoff), { kind: event.kind, index: event.index, value: event.value, ts: event.ts }]
+    const streamEvents = events.filter((item) => item.kind === goal.streamKind)
+    let streamTimes: number[]
+    if (goal.streamKind === 'key') streamTimes = streamEvents.map((item) => item.ts)
+    else if (streamEvents.length === 0) streamTimes = []
+    else {
+      const counts = new Map<number, number>()
+      streamEvents.forEach((item) => counts.set(item.index, (counts.get(item.index) ?? 0) + 1))
+      let dominant = streamEvents[0]!.index
+      counts.forEach((count, index) => { if (count > (counts.get(dominant) ?? 0)) dominant = index })
+      streamTimes = streamEvents.filter((item) => item.index === dominant).map((item) => item.ts)
     }
-    const controlSpan = goal.controlSpan ?? .25
-    const knobIndices = new Set(events.filter((item) => item.kind === 'knob').map((item) => item.index))
-    const movedKnobs = [...knobIndices].filter((index) => spanFor('knob', index) >= controlSpan).length
-    const keyRange = keyEvents.length ? Math.max(...keyEvents.map((item) => item.index)) - Math.min(...keyEvents.map((item) => item.index)) : 0
-    const requirements = [
-      goal.keys === undefined ? undefined : keyEvents.length / goal.keys,
-      goal.pads === undefined ? undefined : padEvents.length / goal.pads,
-      goal.knobs === undefined ? undefined : movedKnobs / goal.knobs,
-      goal.keySpan === undefined ? undefined : keyRange / goal.keySpan,
-      goal.pitch === undefined ? undefined : spanFor('pitch') / controlSpan,
-      goal.mod === undefined ? undefined : spanFor('mod') / controlSpan,
-    ].filter((value): value is number => value !== undefined)
-    const progress = requirements.length ? Math.min(1, ...requirements) : 0
-    next = { ...next, events, count: keyEvents.length + padEvents.length, progress, done: requirements.length > 0 && requirements.every((value) => value >= 1) }
+    streamTimes.sort((a, b) => a - b)
+    const { medianInterval, coefficientOfVariation } = intervalStats(streamTimes)
+    const hasStream = streamTimes.length >= goal.streamN && medianInterval >= 45 && medianInterval <= 700 && coefficientOfVariation < .5
+    const from = streamTimes[0] ?? 0
+    const to = streamTimes[streamTimes.length - 1] ?? 0
+    const others = events.filter((item) => item.kind !== goal.streamKind && item.ts >= from - 300 && item.ts <= to + 300)
+    const done = hasStream && others.length >= goal.otherHits
+    const progress = Math.min(1, (hasStream ? .5 : 0) + Math.min(1, others.length / goal.otherHits) * .5)
+    next = { ...next, events, count: streamTimes.length, progress, done }
+  } else if (goal.type === 'doubles' && event.kind === goal.kind && event.on !== false) {
+    const cutoff = event.ts - goal.withinMs
+    const pairs = next.sequence.map((index, position) => ({ index, time: next.times[position] ?? 0 })).filter((item) => item.time >= cutoff)
+    pairs.push({ index: event.index, time: event.ts })
+    const consumed = new Set<number>()
+    let doubles = 0
+    for (let i = 1; i < pairs.length; i++) {
+      const gap = pairs[i]!.time - pairs[i - 1]!.time
+      if (pairs[i]!.index === pairs[i - 1]!.index && gap <= goal.maxGapMs) { doubles++; consumed.add(i); i++ }
+    }
+    const grooveGaps = pairs.slice(1).map((item, position) => ({ gap: item.time - pairs[position]!.time, at: position + 1 })).filter((g) => !consumed.has(g.at)).map((g) => g.gap)
+    const spacious = grooveGaps.length >= 2 && median(grooveGaps) >= goal.minMedianGapMs
+    const done = pairs.length >= goal.minHits && doubles >= goal.minDoubles && spacious
+    const progress = done ? 1 : Math.min(.9, pairs.length / goal.minHits, doubles / goal.minDoubles, spacious ? 1 : .5)
+    next = { ...next, sequence: pairs.map((item) => item.index), times: pairs.map((item) => item.time), count: doubles, progress, done }
+  } else if (goal.type === 'gesture' && event.kind === goal.kind && (goal.index === undefined || event.index === goal.index)) {
+    const events = [...next.events, { kind: event.kind, index: event.index, value: event.value, ts: event.ts }]
+    const indices = new Set(events.map((item) => item.index))
+    let bestRatio = 0
+    let done = false
+    indices.forEach((index) => {
+      const values = events.filter((item) => item.index === index).map((item) => item.value)
+      const up = rise(values); const down = fall(values)
+      if (up >= goal.span && down >= goal.span * goal.returnRatio) done = true
+      bestRatio = Math.max(bestRatio, Math.min(up / goal.span, down / (goal.span * goal.returnRatio)))
+    })
+    const progress = done ? 1 : Math.min(.85, bestRatio)
+    next = { ...next, events, count: events.length, progress, done }
   } else if (goal.type === 'confirm') {
     return { state, progress: state.progress, done: false }
   }
