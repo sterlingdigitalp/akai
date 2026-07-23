@@ -20,6 +20,7 @@ export function LessonView() {
   const step = lesson.steps[index]!
   const isRecap = step.goal.type === 'count' && step.goal.n === 0
   const completed = !!saved?.completedSteps.includes(step.id) || isRecap
+  useEffect(() => { window.scrollTo({ top: 0 }) }, [lesson.id])
   useEffect(() => { const next = initialDetectorState(); setDetector(next); detectorRef.current = next; setJustDone(false) }, [index, lesson.id])
   const handleEvent = useCallback((event: Parameters<typeof reduceGoal>[2]) => {
     const result = reduceGoal(step.goal, detectorRef.current, event); detectorRef.current = result.state; setDetector(result.state)
@@ -43,12 +44,13 @@ export function LessonView() {
       }
     })
   }, [step, learnPad, learnKnob, completeStep, lesson.id])
+  const backingPhrase = lesson.id === 'sound' || (lesson.id === 'signature-sound' && step.goal.type === 'sweep')
   useEffect(() => {
-    if (lesson.id !== 'sound') return
+    if (!backingPhrase) return
     const notes = [48, 55, 60, 63]; let i = 0; setParam('attack', .35)
     const timer = window.setInterval(() => { const note = notes[i++ % notes.length]!; noteOn(note, .24); window.setTimeout(() => noteOff(note), 520) }, 680)
     return () => { clearInterval(timer); notes.forEach(noteOff) }
-  }, [lesson.id])
+  }, [backingPhrase])
   const skip = () => { completeStep(lesson.id, step.id); setJustDone(true) }
   const playBeat = () => { const sixteenth = 60000 / 90 / 4; for (let s = 0; s < 16; s++) { if ([0, 8].includes(s)) window.setTimeout(() => trigger(0, .82), s * sixteenth); if ([4, 12].includes(s)) window.setTimeout(() => trigger(1, .76), s * sixteenth); if (s % 2 === 0) window.setTimeout(() => trigger(2, .54), s * sixteenth) } skip() }
   const next = () => { if (!saved?.completedSteps.includes(step.id)) completeStep(lesson.id, step.id, index === lesson.steps.length - 1); if (index < lesson.steps.length - 1) setIndex(index + 1); else go('home') }

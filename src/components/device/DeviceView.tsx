@@ -135,6 +135,7 @@ export function DeviceView({ compact = false, highlight }: { compact?: boolean; 
           const y = WHEEL_TRAVEL_BOTTOM - value * (WHEEL_TRAVEL_BOTTOM - WHEEL_TRAVEL_TOP)
           return <g key={kind} className="svg-wheel" onPointerDown={(event) => { event.currentTarget.setPointerCapture(event.pointerId); wheelMove(kind, event) }} onPointerMove={(event) => wheelMove(kind, event)} onPointerUp={(event) => wheelUp(kind, event)} onPointerCancel={(event) => wheelUp(kind, event)} role="slider" aria-label={`${label} wheel`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(value * 100)} tabIndex={0}>
             <rect x={x} y="78" width="48" height="111" rx="18" fill="#090808" stroke="#403b3c" strokeWidth="2"/>
+            {highlight === kind && <rect className="function-highlight" x={x - 4} y="74" width="56" height="119" rx="20"/>}
             <rect x={x + 9} y={y - 25} width="30" height="50" rx="10" fill="url(#wheel)" stroke="#5a5556" strokeWidth="1.5"/>
             {[-15, -7, 1, 9, 17].map((offset) => <line key={offset} x1={x + 13} x2={x + 35} y1={y + offset} y2={y + offset} stroke="#777173" strokeWidth="2" opacity=".62"/>)}
             <text x={x + 24} y="205" textAnchor="middle" fill="#8b8586" fontSize="10" fontWeight="650" letterSpacing="1.2">{label}</text>
