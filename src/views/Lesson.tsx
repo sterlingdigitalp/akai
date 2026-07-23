@@ -11,6 +11,8 @@ import { getEngine } from '../audio/engine'
 import { useProgressStore } from '../state/progressStore'
 import { useProfileStore } from '../state/profileStore'
 import { useUiStore } from '../state/uiStore'
+import { useDiagnosticsStore, type StepSession } from '../state/diagnosticsStore'
+import { captureStep } from '../lessons/diagnostics'
 
 export function LessonView() {
   const id = useUiStore((s) => s.activeLessonId); const go = useUiStore((s) => s.go); const lesson = getLesson(id); const saved = useProgressStore((s) => s.lessons[lesson.id]); const completeStep = useProgressStore((s) => s.completeStep)
@@ -21,12 +23,17 @@ export function LessonView() {
   const step = lesson.steps[index]!
   const isRecap = step.goal.type === 'count' && step.goal.n === 0
   const completed = !!saved?.completedSteps.includes(step.id) || isRecap
+  const outcomeRef = useRef<StepSession['outcome']>('left'); const captureRef = useRef<ReturnType<typeof captureStep> | null>(null)
   useEffect(() => { window.scrollTo({ top: 0 }) }, [lesson.id])
   useEffect(() => { const next = initialDetectorState(); setDetector(next); detectorRef.current = next; setJustDone(false) }, [index, lesson.id])
+  useEffect(() => {
+    outcomeRef.current = 'left'; captureRef.current = captureStep(lesson.id, step.id, step.goal.type)
+    return () => { const capture = captureRef.current; captureRef.current = null; if (!capture) return; capture.setOutcome(outcomeRef.current); const session = capture.finish(); if (session) useDiagnosticsStore.getState().addSession(session) }
+  }, [index, lesson.id])
   const handleEvent = useCallback((event: Parameters<typeof reduceGoal>[2]) => {
     if ('source' in event && event.source === 'replay') return
     const result = reduceGoal(step.goal, detectorRef.current, event); detectorRef.current = result.state; setDetector(result.state)
-    if (result.done && !saved?.completedSteps.includes(step.id)) { completeStep(lesson.id, step.id, index === lesson.steps.length - 1); setJustDone(true) }
+    if (result.done && !saved?.completedSteps.includes(step.id)) { completeStep(lesson.id, step.id, index === lesson.steps.length - 1); setJustDone(true); outcomeRef.current = 'completed' }
   }, [step, saved, completeStep, lesson.id, index, lesson.steps.length])
   useEffect(() => subscribeControls(handleEvent), [handleEvent])
   useEffect(() => {
@@ -37,12 +44,12 @@ export function LessonView() {
       if (targetPads && message.type === 'noteOn' && !captured.has(message.note)) {
         const next = captured.size; captured.add(message.note); learnPad(next, message.note, message.channel)
         const progress = captured.size / 8; detectorRef.current = { ...detectorRef.current, captured: [...captured], progress, done: captured.size >= 8 }; setDetector(detectorRef.current)
-        if (captured.size >= 8) { completeStep(lesson.id, step.id); setJustDone(true) }
+        if (captured.size >= 8) { completeStep(lesson.id, step.id); setJustDone(true); outcomeRef.current = 'completed' }
       }
       if (!targetPads && message.type === 'cc' && !captured.has(message.controller)) {
         const next = captured.size; captured.add(message.controller); learnKnob(next, message.controller)
         const progress = captured.size / 8; detectorRef.current = { ...detectorRef.current, captured: [...captured], progress, done: captured.size >= 8 }; setDetector(detectorRef.current)
-        if (captured.size >= 8) { completeStep(lesson.id, step.id); setJustDone(true) }
+        if (captured.size >= 8) { completeStep(lesson.id, step.id); setJustDone(true); outcomeRef.current = 'completed' }
       }
     })
   }, [step, learnPad, learnKnob, completeStep, lesson.id])
@@ -53,7 +60,7 @@ export function LessonView() {
     const timer = window.setInterval(() => { const note = notes[i++ % notes.length]!; noteOn(note, .24); window.setTimeout(() => noteOff(note), 520) }, 680)
     return () => { clearInterval(timer); notes.forEach(noteOff) }
   }, [backingPhrase])
-  const skip = () => { completeStep(lesson.id, step.id); setJustDone(true) }
+  const skip = () => { outcomeRef.current = step.goal.type === 'confirm' ? 'confirmed' : 'skipped'; completeStep(lesson.id, step.id); setJustDone(true) }
   const playBeat = () => { const sixteenth = 60000 / 90 / 4; for (let s = 0; s < 16; s++) { if ([0, 8].includes(s)) window.setTimeout(() => trigger(0, .82), s * sixteenth); if ([4, 12].includes(s)) window.setTimeout(() => trigger(1, .76), s * sixteenth); if (s % 2 === 0) window.setTimeout(() => trigger(2, .54), s * sixteenth) } skip() }
   const next = () => { if (!saved?.completedSteps.includes(step.id)) completeStep(lesson.id, step.id, index === lesson.steps.length - 1); if (index < lesson.steps.length - 1) setIndex(index + 1); else go('home') }
   const done = completed || justDone

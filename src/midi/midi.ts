@@ -18,6 +18,10 @@ export function emitControl(event: ControlEvent) {
 }
 export const subscribeControls = (subscriber: Subscriber) => { subscribers.add(subscriber); return () => { subscribers.delete(subscriber) } }
 export const subscribeRawMidi = (subscriber: RawSubscriber) => { rawSubscribers.add(subscriber); return () => { rawSubscribers.delete(subscriber) } }
+// fires for every inbound message, including ones parseMidi cannot read — that unreadable traffic is exactly what diagnostics is hunting for
+type ByteSubscriber = (bytes: number[], parsed: ParsedMidiMessage | null) => void
+const byteSubscribers = new Set<ByteSubscriber>()
+export const subscribeRawBytes = (subscriber: ByteSubscriber) => { byteSubscribers.add(subscriber); return () => { byteSubscribers.delete(subscriber) } }
 
 function receive(message: MIDIMessageEvent) {
   if (!message.data) return
@@ -26,6 +30,7 @@ function receive(message: MIDIMessageEvent) {
 
 export function receiveMidiBytes(bytes: number[]) {
   const parsed = parseMidi(bytes)
+  byteSubscribers.forEach((subscriber) => subscriber(bytes, parsed))
   if (!parsed) return
   rawSubscribers.forEach((subscriber) => subscriber(parsed, bytes))
   const event = classify(parsed, useProfileStore.getState().profile)

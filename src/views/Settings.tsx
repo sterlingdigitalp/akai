@@ -7,6 +7,7 @@ import type { DeviceProfile } from '../midi/profile'
 import { useMidiStore } from '../state/midiStore'
 import { useProfileStore } from '../state/profileStore'
 import { useProgressStore } from '../state/progressStore'
+import { useDiagnosticsStore } from '../state/diagnosticsStore'
 
 type RawLine = { time: string; message: ParsedMidiMessage; bytes: number[] }
 type ProgressData = {
@@ -59,6 +60,11 @@ export function Settings() {
   const [dataMessage, setDataMessage] = useState('')
   const [importText, setImportText] = useState('')
   const calibrationRef = useRef<{ target: 'pads' | 'knobs'; captured: Set<number> } | null>(null)
+  const diagnosticsEnabled = useDiagnosticsStore((state) => state.enabled)
+  const setDiagnosticsEnabled = useDiagnosticsStore((state) => state.setEnabled)
+  const diagnosticsSessions = useDiagnosticsStore((state) => state.sessions)
+  const clearDiagnostics = useDiagnosticsStore((state) => state.clear)
+  const [diagMessage, setDiagMessage] = useState('')
 
   useEffect(() => subscribeRawMidi((message, bytes) => {
     setRaw((lines) => [{ time: new Date().toLocaleTimeString(), message, bytes }, ...lines].slice(0, 12))
@@ -112,6 +118,17 @@ export function Settings() {
     }
   }
 
+  const copyDiagnostics = async () => {
+    setDiagMessage('')
+    const payload = { app: 'woodshed', capturedAt: new Date().toISOString(), profile: useProfileStore.getState().profile, sessions: useDiagnosticsStore.getState().sessions }
+    try {
+      await navigator.clipboard.writeText(JSON.stringify(payload))
+      setDiagMessage('Copied to your clipboard.')
+    } catch {
+      setDiagMessage('Woodshed couldn’t copy that. Please try again.')
+    }
+  }
+
   const handleImport = () => {
     try {
       const data = parseImport(importText)
@@ -152,6 +169,19 @@ export function Settings() {
           </details>
         </div>
         <button className="button secondary" disabled={exporting} onClick={() => void handleExport()}>{exporting ? 'Exporting…' : 'Export progress'}</button>
+      </article>
+      <article className="setting-card data-card">
+        <div className="data-copy">
+          <h2>Lesson diagnostics</h2>
+          <p>While you do lessons, Woodshed quietly records what your keyboard actually sends — including messages it doesn’t recognize yet — so we can fix the lessons when something doesn’t work. It stays on this device. Nothing is sent anywhere.</p>
+          <p>{diagnosticsSessions.length} step session{diagnosticsSessions.length === 1 ? '' : 's'} stored.</p>
+          {diagMessage && <p className="data-message" role="status">{diagMessage}</p>}
+        </div>
+        <div className="setting-actions">
+          <button className={`toggle ${diagnosticsEnabled ? 'on' : ''}`} role="switch" aria-checked={diagnosticsEnabled} onClick={() => setDiagnosticsEnabled(!diagnosticsEnabled)}><i/></button>
+          <button className="button secondary" onClick={() => void copyDiagnostics()}>Copy diagnostics</button>
+          <button className="button secondary" onClick={clearDiagnostics}>Clear</button>
+        </div>
       </article>
       <article className="setting-card danger">
         <div><h2>Start fresh</h2><p>Clear lesson completions and your practice history. Your controller setup stays put.</p></div>
