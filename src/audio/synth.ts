@@ -31,7 +31,7 @@ export function noteOn(note: number, velocity = .75) {
   const now = context.currentTime
   const frequency = 440 * 2 ** ((note - 69) / 12)
   const filter = context.createBiquadFilter(); filter.type = 'lowpass'; filter.Q.value = 1 + params.resonance * 18
-  const amp = context.createGain(); amp.gain.setValueAtTime(.0001, now); amp.gain.exponentialRampToValueAtTime(Math.max(.001, velocity * .17), now + .006 + params.attack * 1.2)
+  const amp = context.createGain(); amp.gain.setValueAtTime(.0001, now); amp.gain.linearRampToValueAtTime(Math.max(.001, velocity * .17), now + .004 + params.attack * .8)
   filter.frequency.setValueAtTime(240 + params.cutoff * 1600, now); filter.frequency.exponentialRampToValueAtTime(380 + params.cutoff * 7600, now + .05); filter.frequency.exponentialRampToValueAtTime(220 + params.cutoff * 2000, now + .45)
   const bendCents = (pitchBend - .5) * 400
   const oscillators = (['sawtooth', 'square'] as OscillatorType[]).map((type, index) => { const osc = context.createOscillator(); osc.type = type; osc.frequency.value = frequency; osc.detune.value = bendCents + (index ? 7 : -4); const mix = context.createGain(); mix.gain.value = index ? .34 : .55; osc.connect(mix).connect(filter); osc.start(); return osc })

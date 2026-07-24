@@ -727,6 +727,32 @@ details[open] summary:before {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
+.step-cell.target {
+  border-color: hsl(4 60% 46%);
+  border-style: dashed;
+  background: hsl(4 40% 16%);
+}
+.step-cell.target::after {
+  content: "";
+  display: block;
+  width: 6px;
+  height: 6px;
+  margin: 0 auto;
+  border-radius: 50%;
+  background: hsl(4 70% 55%);
+  opacity: 0.7;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .step-cell.target::after {
+    animation: target-pulse 1.6s ease-in-out infinite;
+  }
+  @keyframes target-pulse {
+    50% {
+      opacity: 1;
+      transform: scale(1.35);
+    }
+  }
+}
 .record-tip {
   margin: 16px 0 0;
   text-align: center;

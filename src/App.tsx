@@ -4,6 +4,7 @@ import { Shell } from './components/Shell'
 import { startMidi, subscribeControls } from './midi/midi'
 import { noteOff, noteOn, setModDepth, setParam, setPitchBend } from './audio/synth'
 import { trigger } from './audio/drums'
+import { unlockAudioOnGesture } from './audio/engine'
 import { useUiStore } from './state/uiStore'
 import { Home } from './views/Home'
 import { LessonView } from './views/Lesson'
@@ -22,6 +23,6 @@ function AudioBridge() {
 }
 export default function App() {
   const view = useUiStore((s) => s.view)
-  useEffect(() => { void startMidi() }, [])
+  useEffect(() => { void startMidi(); unlockAudioOnGesture() }, [])
   return <Shell><AudioBridge/>{view === 'home' && <Home/>}{view === 'lesson' && <LessonView/>}{view === 'playground' && <Playground/>}{view === 'settings' && <Settings/>}</Shell>
 }

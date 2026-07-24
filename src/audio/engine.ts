@@ -33,6 +33,20 @@ export function getEngine(): AudioEngine {
   return { context, master: master!, delayInput: delayInput!, lfo: lfo! }
 }
 
+// A browser only lets audio start from a real user gesture on the page. Hardware MIDI is not one,
+// so a keyboard-first session would stay silent until something on screen was clicked. Unlock the
+// engine on the first pointer/key gesture anywhere, once, so playing the real keyboard just works.
+export function unlockAudioOnGesture() {
+  const unlock = () => {
+    const engine = getEngine()
+    if (engine.context.state === 'suspended') void engine.context.resume()
+    window.removeEventListener('pointerdown', unlock)
+    window.removeEventListener('keydown', unlock)
+  }
+  window.addEventListener('pointerdown', unlock)
+  window.addEventListener('keydown', unlock)
+}
+
 export function connectDelaySend(source: AudioNode, amount: number) {
   const engine = getEngine()
   const send = engine.context.createGain()
