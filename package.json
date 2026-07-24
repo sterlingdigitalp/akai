@@ -9,7 +9,8 @@
     "test": "vitest run",
     "lint": "oxlint",
     "preview": "vite preview",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "app:update": "bash scripts/update-app.sh"
   },
   "dependencies": {
     "@fontsource-variable/space-grotesk": "^5.2.10",
