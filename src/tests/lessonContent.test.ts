@@ -44,8 +44,8 @@ describe('lesson path content', () => {
     })
   })
 
-  it('uses no exact-pitch or absolute-velocity goals in lessons 9–16', () => {
-    LESSONS.slice(8).flatMap((lesson) => lesson.steps).forEach((step) => {
+  it('uses no exact-pitch or absolute-velocity goals in any lesson', () => {
+    LESSONS.flatMap((lesson) => lesson.steps).forEach((step) => {
       expect(step.goal.type).not.toBe('notes')
       if ('match' in step.goal) {
         expect(step.goal.match.minVelocity).toBeUndefined()

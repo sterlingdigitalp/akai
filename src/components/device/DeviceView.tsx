@@ -40,7 +40,7 @@ const ARP_LEGEND = [
 ]
 const isBlack = (note: number) => BLACKS.has(((note % 12) + 12) % 12)
 
-export function DeviceView({ compact = false, highlight }: { compact?: boolean; highlight?: string }) {
+export function DeviceView({ highlight }: { highlight?: string }) {
   const held = useMidiStore((state) => state.heldKeys)
   const knobs = useMidiStore((state) => state.knobValues)
   const flash = useMidiStore((state) => state.padFlash)
@@ -80,9 +80,21 @@ export function DeviceView({ compact = false, highlight }: { compact?: boolean; 
     if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId)
     if (kind === 'pitch') demoControl('pitch', 0, .5)
   }
+  const buttonKey = (event: React.KeyboardEvent<SVGElement>, kind: 'key' | 'pad', index: number, pressed: boolean) => {
+    if (event.key !== 'Enter' && event.key !== ' ') return
+    event.preventDefault()
+    if (event.repeat) return
+    demoControl(kind, index, pressed ? (kind === 'pad' ? .82 : .72) : 0, pressed)
+  }
+  const sliderKey = (event: React.KeyboardEvent<SVGElement>, kind: 'knob' | 'pitch' | 'mod', index: number, value: number) => {
+    const delta = event.key === 'ArrowUp' || event.key === 'ArrowRight' ? .05 : event.key === 'ArrowDown' || event.key === 'ArrowLeft' ? -.05 : 0
+    if (!delta) return
+    event.preventDefault()
+    demoControl(kind, index, value + delta)
+  }
 
   return (
-    <div className={`device-wrap ${compact ? 'is-compact' : ''}`}>
+    <div className="device-wrap">
       <div className="device-caption"><span>MPK mini</span><span className="device-caption-model">PLAYABLE SURFACE</span></div>
       <svg className="device" viewBox="0 0 1280 600" role="group" aria-label="Interactive on-screen MPK Mini keyboard">
         <defs>
@@ -133,7 +145,7 @@ export function DeviceView({ compact = false, highlight }: { compact?: boolean; 
           { kind: 'mod' as const, x: 113, value: wheels.mod, label: 'MOD' },
         ]).map(({ kind, x, value, label }) => {
           const y = WHEEL_TRAVEL_BOTTOM - value * (WHEEL_TRAVEL_BOTTOM - WHEEL_TRAVEL_TOP)
-          return <g key={kind} className="svg-wheel" onPointerDown={(event) => { event.currentTarget.setPointerCapture(event.pointerId); wheelMove(kind, event) }} onPointerMove={(event) => wheelMove(kind, event)} onPointerUp={(event) => wheelUp(kind, event)} onPointerCancel={(event) => wheelUp(kind, event)} role="slider" aria-label={`${label} wheel`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(value * 100)} tabIndex={0}>
+          return <g key={kind} className="svg-wheel" onPointerDown={(event) => { event.currentTarget.setPointerCapture(event.pointerId); wheelMove(kind, event) }} onPointerMove={(event) => wheelMove(kind, event)} onPointerUp={(event) => wheelUp(kind, event)} onPointerCancel={(event) => wheelUp(kind, event)} onLostPointerCapture={() => { if (kind === 'pitch') demoControl('pitch', 0, .5) }} onKeyDown={(event) => sliderKey(event, kind, 0, value)} role="slider" aria-label={`${label} wheel`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(value * 100)} tabIndex={0}>
             <rect x={x} y="78" width="48" height="111" rx="18" fill="#090808" stroke="#403b3c" strokeWidth="2"/>
             {highlight === kind && <rect className="function-highlight" x={x - 4} y="74" width="56" height="119" rx="20"/>}
             <rect x={x + 9} y={y - 25} width="30" height="50" rx="10" fill="url(#wheel)" stroke="#5a5556" strokeWidth="1.5"/>
@@ -155,7 +167,8 @@ export function DeviceView({ compact = false, highlight }: { compact?: boolean; 
           const y = 71 + row * 91
           const active = flash?.index === index && performance.now() - flash.ts < 260
           const velocity = active ? flash.velocity : 0
-          return <g key={`pad-${index}`} className={active ? 'svg-pad is-hit' : 'svg-pad'} style={{ transformOrigin: `${x + 41}px ${y + 36}px` }} onPointerDown={(event) => { event.currentTarget.setPointerCapture(event.pointerId); demoControl('pad', index, .82, true) }} onPointerUp={() => demoControl('pad', index, 0, false)} role="button" aria-label={`Pad ${index + 1}`} tabIndex={0}>
+          const releasePad = () => demoControl('pad', index, 0, false)
+          return <g key={`pad-${index}`} className={active ? 'svg-pad is-hit' : 'svg-pad'} style={{ transformOrigin: `${x + 41}px ${y + 36}px` }} onPointerDown={(event) => { event.currentTarget.setPointerCapture(event.pointerId); demoControl('pad', index, .82, true) }} onPointerUp={releasePad} onPointerCancel={releasePad} onLostPointerCapture={releasePad} onKeyDown={(event) => buttonKey(event, 'pad', index, true)} onKeyUp={(event) => buttonKey(event, 'pad', index, false)} role="button" aria-label={`Pad ${index + 1}`} tabIndex={0}>
             <rect x={x} y={y} width="82" height="72" rx="11" fill={active ? `hsl(${6 + velocity * 30} 90% ${46 + velocity * 12}%)` : '#1d1b1c'} stroke={active ? '#ffaf3f' : '#4c4748'} strokeWidth="2" filter={active ? 'url(#padGlow)' : undefined}/>
             {((highlight === 'chords' && index === 4) || (highlight === 'scales' && index === 6)) && <rect className="function-highlight" x={x - 4} y={y - 4} width="90" height="80" rx="13"/>}
           </g>
@@ -179,7 +192,7 @@ export function DeviceView({ compact = false, highlight }: { compact?: boolean; 
           const value = knobs[index] ?? .5
           const angle = -135 + value * 270
           const radians = angle * Math.PI / 180
-          return <g key={`knob-${index}`} className="svg-knob" onPointerDown={(event) => knobDown(index, event)} onPointerMove={(event) => knobMove(index, event)} onPointerUp={() => setDragKnob(null)} onPointerCancel={() => setDragKnob(null)} role="slider" aria-label={`Knob ${index + 1}`} aria-valuenow={Math.round(value * 100)} tabIndex={0}>
+          return <g key={`knob-${index}`} className="svg-knob" onPointerDown={(event) => knobDown(index, event)} onPointerMove={(event) => knobMove(index, event)} onPointerUp={() => setDragKnob(null)} onPointerCancel={() => setDragKnob(null)} onLostPointerCapture={() => setDragKnob(null)} onKeyDown={(event) => sliderKey(event, 'knob', index, value)} role="slider" aria-label={`Knob ${index + 1}`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(value * 100)} tabIndex={0}>
             <circle cx={x} cy={y} r="26" fill="#0b0a0a" stroke="#474243" strokeWidth="3"/>
             <path d={`M ${x + Math.cos(-135 * Math.PI / 180) * 33} ${y + Math.sin(-135 * Math.PI / 180) * 33} A 33 33 0 ${value > .67 ? 1 : 0} 1 ${x + Math.cos(radians) * 33} ${y + Math.sin(radians) * 33}`} fill="none" stroke="#ef493f" strokeWidth="4" strokeLinecap="round"/>
             <line x1={x} y1={y} x2={x + Math.cos(radians) * 18} y2={y + Math.sin(radians) * 18} stroke="#eee8e1" strokeWidth="3" strokeLinecap="round"/>
@@ -252,10 +265,14 @@ export function DeviceView({ compact = false, highlight }: { compact?: boolean; 
         <line className="keybed-pinstripe" x1="9" x2="1271" y1="349" y2="349" stroke="#7c2420" strokeWidth="2" aria-hidden="true" pointerEvents="none"/>
 
         <g className="keys">
-          {whites.map((note, index) => <rect key={note} x={47 + index * 79} y="352" width="77" height="215" rx={3} fill={held.has(note) ? '#ffae43' : '#e8e3dc'} stroke="#181617" strokeWidth="2" className="svg-key" onPointerDown={(event) => { event.currentTarget.setPointerCapture(event.pointerId); demoControl('key', note, .72, true) }} onPointerUp={() => demoControl('key', note, 0, false)} role="button" aria-label="Piano key" tabIndex={0}/>) }
+          {whites.map((note, index) => {
+            const releaseKey = () => demoControl('key', note, 0, false)
+            return <rect key={note} x={47 + index * 79} y="352" width="77" height="215" rx={3} fill={held.has(note) ? '#ffae43' : '#e8e3dc'} stroke="#181617" strokeWidth="2" className="svg-key" onPointerDown={(event) => { event.currentTarget.setPointerCapture(event.pointerId); demoControl('key', note, .72, true) }} onPointerUp={releaseKey} onPointerCancel={releaseKey} onLostPointerCapture={releaseKey} onKeyDown={(event) => buttonKey(event, 'key', note, true)} onKeyUp={(event) => buttonKey(event, 'key', note, false)} role="button" aria-label={`Piano key ${note}`} tabIndex={0}/>
+          })}
           {blackNotes.map((note) => {
             const prior = whiteIndexBefore(note)
-            return <rect key={note} x={47 + prior * 79 - 25} y="352" width="50" height="133" rx={2.5} fill={held.has(note) ? '#d94339' : '#151314'} stroke="#050505" strokeWidth="2" className="svg-key black" onPointerDown={(event) => { event.currentTarget.setPointerCapture(event.pointerId); demoControl('key', note, .72, true) }} onPointerUp={() => demoControl('key', note, 0, false)} role="button" aria-label="Black piano key" tabIndex={0}/>
+            const releaseKey = () => demoControl('key', note, 0, false)
+            return <rect key={note} x={47 + prior * 79 - 25} y="352" width="50" height="133" rx={2.5} fill={held.has(note) ? '#d94339' : '#151314'} stroke="#050505" strokeWidth="2" className="svg-key black" onPointerDown={(event) => { event.currentTarget.setPointerCapture(event.pointerId); demoControl('key', note, .72, true) }} onPointerUp={releaseKey} onPointerCancel={releaseKey} onLostPointerCapture={releaseKey} onKeyDown={(event) => buttonKey(event, 'key', note, true)} onKeyUp={(event) => buttonKey(event, 'key', note, false)} role="button" aria-label={`Black piano key ${note}`} tabIndex={0}/>
           })}
         </g>
       </svg>

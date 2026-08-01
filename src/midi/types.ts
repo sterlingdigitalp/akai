@@ -8,4 +8,5 @@ export type ControlEvent = {
   channel: number
   ts: number
   source: 'hardware' | 'demo' | 'replay'
+  port?: string
 }

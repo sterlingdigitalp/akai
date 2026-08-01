@@ -54,9 +54,6 @@
   font-size: 12px;
   margin: 10px 0 0;
 }
-.is-compact .device-help {
-  display: none;
-}
 .function-highlight {
   fill: none;
   stroke: #ef493f;

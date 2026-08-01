@@ -108,6 +108,20 @@ export function mixParts(goal: MixGoal, events: CapturedControl[], now: number):
 
 export function reduceGoal(goal: GoalSpec, state: DetectorState, event: LessonEvent): { state: DetectorState; progress: number; done: boolean } {
   if (state.done) return { state, progress: 1, done: true }
+  const relevant =
+    goal.type === 'event' || goal.type === 'count' ? matches(event, goal.match)
+      : goal.type === 'sweep' ? event.kind === 'knob' && event.index === goal.index
+        : goal.type === 'notes' || goal.type === 'stream' || goal.type === 'chordmode' || goal.type === 'scalefit' || goal.type === 'contour' ? event.kind === 'key' && event.on !== false
+          : goal.type === 'timing' ? event.kind === 'pad' && event.index === goal.padIndex && event.on !== false
+            : goal.type === 'calibrate' ? event.kind === (goal.target === 'pads' ? 'pad' : 'knob') && ('on' in event ? event.on !== false : true)
+              : goal.type === 'pattern' ? event.kind === 'pattern'
+                : goal.type === 'repeat' || goal.type === 'groovemix' || goal.type === 'alternation' ? event.kind === 'pad' && event.on !== false
+                  : goal.type === 'dynamics' || goal.type === 'phrases' || goal.type === 'variety' || goal.type === 'density' || goal.type === 'doubles' ? event.kind === goal.kind && event.on !== false
+                    : goal.type === 'controlrange' || goal.type === 'gesture' ? event.kind === goal.kind && (goal.index === undefined || event.index === goal.index)
+                      : goal.type === 'mix' ? event.kind !== 'pattern' && event.on !== false
+                        : goal.type === 'overlay' ? (event.kind === 'key' || event.kind === 'pad') && event.on !== false
+                          : false
+  if (!relevant) return { state, progress: state.progress, done: false }
   let next = { ...state, sequence: [...state.sequence], times: [...state.times], captured: [...state.captured], values: [...state.values], events: [...state.events] }
   if (goal.type === 'event') {
     if (matches(event, goal.match)) next = { ...next, count: 1, progress: 1, done: true }
@@ -159,7 +173,7 @@ export function reduceGoal(goal: GoalSpec, state: DetectorState, event: LessonEv
     if (!next.captured.includes(event.index)) next.captured.push(event.index)
     const progress = Math.min(1, next.captured.length / 8); next = { ...next, progress, done: progress >= 1 }
   } else if (goal.type === 'pattern' && event.kind === 'pattern') {
-    const good = [0, 8].every((s) => event.grid[0]?.[s]) && [4, 12].every((s) => event.grid[1]?.[s]) && [0, 2, 4, 6, 8, 10, 12, 14].every((s) => event.grid[2]?.[s])
+    const good = goal.check === 'firstBeat' && [0, 8].every((s) => event.grid[0]?.[s]) && [4, 12].every((s) => event.grid[1]?.[s]) && [0, 2, 4, 6, 8, 10, 12, 14].every((s) => event.grid[2]?.[s])
     next = { ...next, progress: good ? 1 : 0, done: good }
   } else if (goal.type === 'chordmode' && event.kind === 'key' && event.on !== false) {
     const windowMs = goal.windowMs ?? 8000; const clusterMs = goal.clusterMs ?? 25
@@ -201,7 +215,7 @@ export function reduceGoal(goal: GoalSpec, state: DetectorState, event: LessonEv
     const progress = done ? 1 : (goal.denser ? base * .5 : base)
     next = { ...next, sequence: pairs.map((item) => item.note), times: pairs.map((item) => item.time), count: targetTimes.length, progress, done, baselineMedian }
   } else if (goal.type === 'dynamics' && event.kind === goal.kind && event.on !== false) {
-    next.values.push(event.value)
+    next.values = [...next.values.slice(-(goal.minHits * 4 - 1)), event.value]
     const hits = next.values.length; const range = Math.max(...next.values) - Math.min(...next.values)
     const done = hits >= goal.minHits && range >= goal.spread
     const progress = Math.min(1, Math.min(hits / goal.minHits, range / goal.spread))
@@ -338,7 +352,7 @@ export function reduceGoal(goal: GoalSpec, state: DetectorState, event: LessonEv
     const progress = done ? 1 : Math.min(.9, pairs.length / goal.minHits, doubles / goal.minDoubles, spacious ? 1 : .5)
     next = { ...next, sequence: pairs.map((item) => item.index), times: pairs.map((item) => item.time), count: doubles, progress, done }
   } else if (goal.type === 'gesture' && event.kind === goal.kind && (goal.index === undefined || event.index === goal.index)) {
-    const events = [...next.events, { kind: event.kind, index: event.index, value: event.value, ts: event.ts }]
+    const events = [...next.events.slice(-255), { kind: event.kind, index: event.index, value: event.value, ts: event.ts }]
     const indices = new Set(events.map((item) => item.index))
     let bestRatio = 0
     let done = false

@@ -5,7 +5,7 @@ import { MixMeter } from '../components/MixMeter'
 import { getLesson } from '../lessons/content'
 import { initialDetectorState, mixParts, reduceGoal, type DetectorState } from '../lessons/engine'
 import { subscribeControls, subscribeRawMidi } from '../midi/midi'
-import { noteOff, noteOn, setParam } from '../audio/synth'
+import { getParam, noteOff, noteOn, setParam } from '../audio/synth'
 import { trigger } from '../audio/drums'
 import { getEngine } from '../audio/engine'
 import { useProgressStore } from '../state/progressStore'
@@ -29,7 +29,7 @@ export function LessonView() {
   useEffect(() => {
     outcomeRef.current = 'left'; captureRef.current = captureStep(lesson.id, step.id, step.goal.type)
     return () => { const capture = captureRef.current; captureRef.current = null; if (!capture) return; capture.setOutcome(outcomeRef.current); const session = capture.finish(); if (session) useDiagnosticsStore.getState().addSession(session) }
-  }, [index, lesson.id])
+  }, [index, lesson.id, step.id, step.goal.type])
   const handleEvent = useCallback((event: Parameters<typeof reduceGoal>[2]) => {
     if ('source' in event && event.source === 'replay') return
     const result = reduceGoal(step.goal, detectorRef.current, event); detectorRef.current = result.state; setDetector(result.state)
@@ -38,9 +38,11 @@ export function LessonView() {
   useEffect(() => subscribeControls(handleEvent), [handleEvent])
   useEffect(() => {
     if (step.goal.type !== 'calibrate') return
-    const captured = new Set<number>()
-    return subscribeRawMidi((message) => {
+    const captured = new Set<number>(); let sourcePort: string | undefined
+    return subscribeRawMidi((message, _bytes, port) => {
       const targetPads = step.goal.type === 'calibrate' && step.goal.target === 'pads'
+      if (sourcePort && port !== sourcePort) return
+      if (!sourcePort && port) sourcePort = port
       if (targetPads && message.type === 'noteOn' && !captured.has(message.note)) {
         const next = captured.size; captured.add(message.note); learnPad(next, message.note, message.channel)
         const progress = captured.size / 8; detectorRef.current = { ...detectorRef.current, captured: [...captured], progress, done: captured.size >= 8 }; setDetector(detectorRef.current)
@@ -54,20 +56,42 @@ export function LessonView() {
     })
   }, [step, learnPad, learnKnob, completeStep, lesson.id])
   const backingPhrase = lesson.id === 'sound' || (lesson.id === 'signature-sound' && step.goal.type === 'gesture')
+  const beatTimers = useRef<Set<number>>(new Set())
   useEffect(() => {
     if (!backingPhrase) return
-    const notes = [48, 55, 60, 63]; let i = 0; setParam('attack', .35)
-    const timer = window.setInterval(() => { const note = notes[i++ % notes.length]!; noteOn(note, .24); window.setTimeout(() => noteOff(note), 520) }, 680)
-    return () => { clearInterval(timer); notes.forEach(noteOff) }
+    const timers = beatTimers.current
+    const notes = [48, 55, 60, 63]; let i = 0; const priorAttack = getParam('attack'); setParam('attack', .35)
+    const timer = window.setInterval(() => {
+      const note = notes[i++ % notes.length]!
+      noteOn(note, .24)
+      const timeout = window.setTimeout(() => { timers.delete(timeout); noteOff(note) }, 520)
+      timers.add(timeout)
+    }, 680)
+    return () => { clearInterval(timer); timers.forEach(clearTimeout); timers.clear(); notes.forEach(noteOff); setParam('attack', priorAttack) }
   }, [backingPhrase])
+  useEffect(() => {
+    const timers = beatTimers.current
+    return () => { timers.forEach(clearTimeout); timers.clear() }
+  }, [index])
   const skip = () => { outcomeRef.current = step.goal.type === 'confirm' ? 'confirmed' : 'skipped'; completeStep(lesson.id, step.id); setJustDone(true) }
-  const playBeat = () => { const sixteenth = 60000 / 90 / 4; for (let s = 0; s < 16; s++) { if ([0, 8].includes(s)) window.setTimeout(() => trigger(0, .82), s * sixteenth); if ([4, 12].includes(s)) window.setTimeout(() => trigger(1, .76), s * sixteenth); if (s % 2 === 0) window.setTimeout(() => trigger(2, .54), s * sixteenth) } skip() }
+  const playBeat = () => {
+    const sixteenth = 60000 / 90 / 4
+    for (let s = 0; s < 16; s++) {
+      const at = s * sixteenth
+      if ([0, 8].includes(s)) beatTimers.current.add(window.setTimeout(() => trigger(0, .82), at))
+      if ([4, 12].includes(s)) beatTimers.current.add(window.setTimeout(() => trigger(1, .76), at))
+      if (s % 2 === 0) beatTimers.current.add(window.setTimeout(() => trigger(2, .54), at))
+    }
+    const doneTimer = window.setTimeout(() => { beatTimers.current.clear(); outcomeRef.current = 'confirmed'; completeStep(lesson.id, step.id); setJustDone(true) }, 16 * sixteenth)
+    beatTimers.current.add(doneTimer)
+  }
   const next = () => { if (!saved?.completedSteps.includes(step.id)) completeStep(lesson.id, step.id, index === lesson.steps.length - 1); if (index < lesson.steps.length - 1) setIndex(index + 1); else go('home') }
   const done = completed || justDone
   const now = useTick(step.goal.type === 'mix' && !done)
   const parts = step.goal.type === 'mix' ? mixParts(step.goal, detector.events, now) : []
   const liveProgress = step.goal.type === 'mix' ? (parts.length ? Math.min(1, ...parts.map((part) => part.ratio)) : 0) : detector.progress
-  return <section className="lesson-view"><button className="back-link" onClick={() => go('home')}>← Lesson path</button><div className="lesson-meta"><span>Lesson {lesson.number}</span><span>{index + 1} / {lesson.steps.length}</span></div><article className={`instruction-card ${done ? 'is-complete' : ''}`}><div className="step-check">{done ? '✓' : index + 1}</div><div className="instruction-copy"><p className="eyebrow">{lesson.title}</p><h1>{step.title}</h1><p className="lead">{step.instruction}</p>{step.hint && <details><summary>Need a hint?</summary><p>{step.hint}</p></details>}{step.recap && <div className="recap-list">{step.recap.map((point) => <span key={point}>✓ {point}</span>)}</div>}</div><div className="step-actions">{index > 0 && <button className="text-button" onClick={() => setIndex(index - 1)}>← Previous</button>}{!done && !isRecap && (step.goal.type === 'confirm' ? <button className="button secondary" onClick={skip}>✓ {step.confirm}</button> : <button className="text-button" onClick={skip}>{step.goal.type === 'calibrate' ? 'Use defaults' : 'Skip for now'}</button>)}{step.id === 'play' && !done && <button className="button secondary" onClick={playBeat}>▶ Play your beat</button>}<button className="button primary" disabled={!done} onClick={next}>{index === lesson.steps.length - 1 ? 'Finish lesson' : 'Next move'} <span>→</span></button></div>{justDone && <div className="particles" aria-hidden="true">✦ · ✦ · ✦</div>}</article><div className="progress-track" aria-label={`${Math.round(done ? 100 : liveProgress * 100)}% complete`}><i style={{ width: `${done ? 100 : liveProgress * 100}%` }}/></div>{step.goal.type === 'mix' && !done && <MixMeter parts={parts} withinMs={step.goal.withinMs} now={now}/>}{step.goal.type === 'timing' && <Metronome bpm={step.goal.bpm}/>} {step.goal.type === 'pattern' ? <LessonPattern onChange={(grid) => handleEvent({ kind: 'pattern', grid, ts: performance.now() })}/> : <DeviceView highlight={step.highlight}/>}</section>
+  const garageBandLesson = lesson.id === 'daw' || lesson.id === 'live-set'
+  return <section className="lesson-view"><button className="back-link" onClick={() => go('home')}>← Lesson path</button>{garageBandLesson && <div className="daw-isolation" role="status"><strong>GarageBand monitor mode:</strong> Woodshed’s synth and drums are muted, so only GarageBand can confirm its audio.</div>}<div className="lesson-meta"><span>Lesson {lesson.number}</span><span>{index + 1} / {lesson.steps.length}</span></div><article className={`instruction-card ${done ? 'is-complete' : ''}`}><div className="step-check">{done ? '✓' : index + 1}</div><div className="instruction-copy"><p className="eyebrow">{lesson.title}</p><h1>{step.title}</h1><p className="lead">{step.instruction}</p>{step.hint && <details><summary>Need a hint?</summary><p>{step.hint}</p></details>}{step.recap && <div className="recap-list">{step.recap.map((point) => <span key={point}>✓ {point}</span>)}</div>}</div><div className="step-actions">{index > 0 && <button className="text-button" onClick={() => setIndex(index - 1)}>← Previous</button>}{!done && !isRecap && (step.goal.type === 'confirm' ? <button className="button secondary" onClick={skip}>✓ {step.confirm}</button> : <button className="text-button" onClick={skip}>{step.goal.type === 'calibrate' ? 'Use defaults' : 'Skip for now'}</button>)}{step.id === 'play' && !done && <button className="button secondary" onClick={playBeat}>▶ Play your beat</button>}<button className="button primary" disabled={!done} onClick={next}>{index === lesson.steps.length - 1 ? 'Finish lesson' : 'Next move'} <span>→</span></button></div>{justDone && <div className="particles" aria-hidden="true">✦ · ✦ · ✦</div>}</article><div className="progress-track" aria-label={`${Math.round(done ? 100 : liveProgress * 100)}% complete`}><i style={{ width: `${done ? 100 : liveProgress * 100}%` }}/></div>{step.goal.type === 'mix' && !done && <MixMeter parts={parts} withinMs={step.goal.withinMs} now={now}/>}{step.goal.type === 'timing' && <Metronome bpm={step.goal.bpm}/>} {step.goal.type === 'pattern' ? <LessonPattern onChange={(grid) => handleEvent({ kind: 'pattern', grid, ts: performance.now() })}/> : <DeviceView highlight={step.highlight}/>}</section>
 }
 
 function useTick(active: boolean) {

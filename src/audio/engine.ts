@@ -6,6 +6,7 @@ let delayInput: GainNode | null = null
 let lfo: OscillatorNode | null = null
 
 export type AudioEngine = { context: AudioContext; master: GainNode; delayInput: GainNode; lfo: OscillatorNode }
+export type EngineParam = 'master' | 'delayTime' | 'feedback'
 export function getEngine(): AudioEngine {
   if (!context) {
     context = new AudioContext()
@@ -52,6 +53,14 @@ export function connectDelaySend(source: AudioNode, amount: number) {
   const send = engine.context.createGain()
   send.gain.value = amount
   source.connect(send)
-  send.connect(delay!)
+  send.connect(engine.delayInput)
   return send
+}
+
+export function setEngineParam(name: EngineParam, value: number) {
+  const engine = getEngine()
+  const normalized = Math.max(0, Math.min(1, value))
+  if (name === 'master') engine.master.gain.setTargetAtTime(.15 + normalized * .85, engine.context.currentTime, .02)
+  if (name === 'delayTime') delay!.delayTime.setTargetAtTime(.06 + normalized * .64, engine.context.currentTime, .02)
+  if (name === 'feedback') feedback!.gain.setTargetAtTime(.05 + normalized * .62, engine.context.currentTime, .02)
 }

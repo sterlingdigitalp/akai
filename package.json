@@ -1,16 +1,26 @@
 {
-  "name": "akai",
+  "name": "woodshed",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.1.0",
+  "packageManager": "npm@11.16.0",
+  "engines": {
+    "node": ">=24 <27",
+    "npm": ">=11 <12"
+  },
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "build:native": "node scripts/build-native-frontend.mjs",
     "test": "vitest run",
-    "lint": "oxlint",
+    "lint": "oxlint --deny-warnings",
+    "verify:web": "npm test && npm run lint && npm run build",
+    "verify:native": "cargo fmt --manifest-path src-tauri/Cargo.toml --all -- --check && cargo clippy --manifest-path src-tauri/Cargo.toml --locked --all-targets -- -D warnings && cargo test --manifest-path src-tauri/Cargo.toml --locked",
+    "verify": "npm run verify:web && npm run verify:native",
     "preview": "vite preview",
     "tauri": "tauri",
-    "app:update": "bash scripts/update-app.sh"
+    "app:update": "bash scripts/update-app.sh",
+    "release:mac": "bash scripts/package-release.sh"
   },
   "dependencies": {
     "@fontsource-variable/space-grotesk": "^5.2.10",
@@ -18,7 +28,6 @@
     "@tauri-apps/api": "^2.11.1",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
-    "vitest": "^4.1.10",
     "zustand": "^5.0.14"
   },
   "devDependencies": {
@@ -29,6 +38,7 @@
     "@vitejs/plugin-react": "^6.0.3",
     "oxlint": "^1.71.0",
     "typescript": "~6.0.2",
-    "vite": "^8.1.1"
+    "vite": "^8.1.1",
+    "vitest": "^4.1.10"
   }
 }

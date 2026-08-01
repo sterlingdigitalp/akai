@@ -115,3 +115,14 @@
     transition: opacity 0.4s;
   }
 }
+.daw-isolation {
+  margin: 18px 0;
+  padding: 13px 16px;
+  border: 1px solid hsl(142 45% 38%);
+  border-radius: 12px;
+  color: hsl(142 45% 86%);
+  background: hsl(142 35% 13%);
+}
+.daw-isolation strong {
+  margin-right: 6px;
+}

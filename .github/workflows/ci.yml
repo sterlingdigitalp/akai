@@ -1,0 +1,50 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npm run verify:web
+      - run: npm audit --audit-level=high
+
+  native:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.96.0
+          components: clippy,rustfmt
+      - run: npm ci
+      - run: npm run verify:native
+      - run: npm run tauri build -- --bundles app
+      - name: Record unsigned package status
+        run: |
+          test -d src-tauri/target/release/bundle/macos/Woodshed.app
+          codesign --verify --deep --strict src-tauri/target/release/bundle/macos/Woodshed.app || true
+
+  rust-advisories:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: rustsec/audit-check@v2.0.0
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}

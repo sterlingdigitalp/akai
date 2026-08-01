@@ -20,11 +20,11 @@ export function captureStep(lessonId: string, stepId: string, goalType: string):
   const startedAt = new Date().toISOString(); const start = performance.now()
   const messages: RawCapture[] = []; const channels = new Set<number>(); const notes = new Set<number>(); const controllers = new Set<number>()
   const counts: Record<string, number> = {}; let unknownCount = 0
-  const unsubscribe = subscribeRawBytes((bytes, message) => {
+  const unsubscribe = subscribeRawBytes((bytes, message, port) => {
     const t = performance.now() - start
     if (!message) {
       unknownCount++; counts.unparsed = (counts.unparsed ?? 0) + 1
-      if (messages.length < MAX_MESSAGES) messages.push({ t, type: 'unparsed', channel: (bytes[0] ?? 0) & 0x0f, data1: bytes[1] ?? 0, data2: bytes[2] ?? 0, known: false, bytes: bytes.slice(0, 8) })
+      if (messages.length < MAX_MESSAGES) messages.push({ t, type: 'unparsed', channel: (bytes[0] ?? 0) & 0x0f, data1: bytes[1] ?? 0, data2: bytes[2] ?? 0, known: false, ...(port ? { port } : {}), bytes: bytes.slice(0, 8) })
       return
     }
     const known = classify(message, useProfileStore.getState().profile) !== null
@@ -33,7 +33,7 @@ export function captureStep(lessonId: string, stepId: string, goalType: string):
     channels.add(message.channel)
     if (message.type === 'noteOn' || message.type === 'noteOff') notes.add(message.note)
     if (message.type === 'cc') controllers.add(message.controller)
-    if (messages.length < MAX_MESSAGES) { const [data1, data2] = toData(message); messages.push({ t, type: message.type, channel: message.channel, data1, data2, known }) }
+    if (messages.length < MAX_MESSAGES) { const [data1, data2] = toData(message); messages.push({ t, type: message.type, channel: message.channel, data1, data2, known, ...(port ? { port } : {}) }) }
   })
   return {
     setOutcome: (next) => { outcome = next },

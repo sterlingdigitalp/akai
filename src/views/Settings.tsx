@@ -3,80 +3,77 @@ import { useEffect, useRef, useState } from 'react'
 import { isTauri } from '../midi/tauri'
 import { setDemoMode, subscribeRawMidi } from '../midi/midi'
 import type { ParsedMidiMessage } from '../midi/parser'
-import type { DeviceProfile } from '../midi/profile'
 import { useMidiStore } from '../state/midiStore'
 import { useProfileStore } from '../state/profileStore'
 import { useProgressStore } from '../state/progressStore'
 import { useDiagnosticsStore } from '../state/diagnosticsStore'
+import { DATA_SCHEMA_VERSION, parseWoodshedData, type WoodshedData } from '../state/dataSchema'
+import { usePatternStore } from '../state/patternStore'
+import { useTakesStore } from '../state/takesStore'
+import { useAudioOutputStore } from '../state/audioOutputStore'
 
-type RawLine = { time: string; message: ParsedMidiMessage; bytes: number[] }
-type ProgressData = {
-  lessons: ReturnType<typeof useProgressStore.getState>['lessons']
-  practiceDays: string[]
-}
-type WoodshedData = {
-  progress: ProgressData
-  profile: DeviceProfile
-  pattern: unknown
-}
-
-function readPattern() {
-  try {
-    const pattern = localStorage.getItem('woodshed.pattern.v1')
-    return pattern ? JSON.parse(pattern) as unknown : null
-  } catch {
-    return null
-  }
-}
+type RawLine = { time: string; message: ParsedMidiMessage; bytes: number[]; port?: string }
 
 function exportData(): WoodshedData {
   const { lessons, practiceDays } = useProgressStore.getState()
   return {
+    schema: 'woodshed',
+    version: DATA_SCHEMA_VERSION,
+    exportedAt: new Date().toISOString(),
     progress: { lessons, practiceDays },
     profile: useProfileStore.getState().profile,
-    pattern: readPattern(),
+    pattern: usePatternStore.getState().pattern,
+    takes: useTakesStore.getState().takes,
+    diagnostics: {
+      enabled: useDiagnosticsStore.getState().enabled,
+      sessions: useDiagnosticsStore.getState().sessions,
+    },
   }
 }
 
-function parseImport(value: string): WoodshedData {
-  const data = JSON.parse(value) as Partial<WoodshedData> | null
-  if (!data || typeof data !== 'object' || !data.progress || !data.profile || !('pattern' in data)) throw new Error('missing data')
-  if (!data.progress.lessons || typeof data.progress.lessons !== 'object' || !Array.isArray(data.progress.practiceDays)) throw new Error('invalid progress')
-  if (!Array.isArray(data.profile.padNotes) || !Array.isArray(data.profile.knobCCs)) throw new Error('invalid profile')
-  if (data.pattern !== null && data.pattern !== undefined && !Array.isArray(data.pattern)) throw new Error('invalid pattern')
-  return data as WoodshedData
-}
-
 export function Settings() {
+  type CalibrationTarget = 'pads' | 'knobs' | 'keys' | 'mod'
   const status = useMidiStore((state) => state.status)
   const learnPad = useProfileStore((state) => state.learnPad)
   const learnKnob = useProfileStore((state) => state.learnKnob)
+  const learnKeyChannel = useProfileStore((state) => state.learnKeyChannel)
+  const learnModCC = useProfileStore((state) => state.learnModCC)
   const resetProgress = useProgressStore((state) => state.reset)
   const [confirm, setConfirm] = useState(false)
   const [raw, setRaw] = useState<RawLine[]>([])
-  const [calibrating, setCalibrating] = useState<'pads' | 'knobs' | null>(null)
+  const [calibrating, setCalibrating] = useState<CalibrationTarget | null>(null)
   const [calCount, setCalCount] = useState(0)
   const [exporting, setExporting] = useState(false)
   const [dataMessage, setDataMessage] = useState('')
   const [importText, setImportText] = useState('')
-  const calibrationRef = useRef<{ target: 'pads' | 'knobs'; captured: Set<number> } | null>(null)
+  const calibrationRef = useRef<{ target: CalibrationTarget; captured: Set<number>; port?: string } | null>(null)
   const diagnosticsEnabled = useDiagnosticsStore((state) => state.enabled)
   const setDiagnosticsEnabled = useDiagnosticsStore((state) => state.setEnabled)
   const diagnosticsSessions = useDiagnosticsStore((state) => state.sessions)
   const clearDiagnostics = useDiagnosticsStore((state) => state.clear)
   const [diagMessage, setDiagMessage] = useState('')
+  const audioEnabled = useAudioOutputStore((state) => state.enabled)
+  const setAudioEnabled = useAudioOutputStore((state) => state.setEnabled)
 
-  useEffect(() => subscribeRawMidi((message, bytes) => {
-    setRaw((lines) => [{ time: new Date().toLocaleTimeString(), message, bytes }, ...lines].slice(0, 12))
+  useEffect(() => subscribeRawMidi((message, bytes, port) => {
+    setRaw((lines) => [{ time: new Date().toLocaleTimeString(), message, bytes, port }, ...lines].slice(0, 12))
   }), [])
 
-  useEffect(() => subscribeRawMidi((message) => {
+  useEffect(() => subscribeRawMidi((message, _bytes, port) => {
     const session = calibrationRef.current
     if (!session) return
     const value = session.target === 'pads' && message.type === 'noteOn'
       ? message.note
       : session.target === 'knobs' && message.type === 'cc' ? message.controller : null
+    if (session.target === 'keys' && message.type === 'noteOn') {
+      learnKeyChannel(message.channel); calibrationRef.current = null; setCalibrating(null); setCalCount(1); return
+    }
+    if (session.target === 'mod' && message.type === 'cc') {
+      learnModCC(message.controller); calibrationRef.current = null; setCalibrating(null); setCalCount(1); return
+    }
     if (value === null || session.captured.has(value)) return
+    if (session.port && port !== session.port) return
+    if (!session.port && port) session.port = port
     const index = session.captured.size
     session.captured.add(value)
     if (session.target === 'pads' && message.type === 'noteOn') learnPad(index, message.note, message.channel)
@@ -86,9 +83,9 @@ export function Settings() {
       calibrationRef.current = null
       setCalibrating(null)
     }
-  }), [learnPad, learnKnob])
+  }), [learnPad, learnKnob, learnKeyChannel, learnModCC])
 
-  const beginCalibration = (target: 'pads' | 'knobs') => {
+  const beginCalibration = (target: CalibrationTarget) => {
     calibrationRef.current = { target, captured: new Set() }
     setCalibrating(target)
     setCalCount(0)
@@ -131,13 +128,14 @@ export function Settings() {
 
   const handleImport = () => {
     try {
-      const data = parseImport(importText)
+      const data = parseWoodshedData(importText)
       useProgressStore.setState({ lessons: data.progress.lessons, practiceDays: data.progress.practiceDays })
       useProfileStore.setState({ profile: data.profile })
-      if (data.pattern === null) localStorage.removeItem('woodshed.pattern.v1')
-      else localStorage.setItem('woodshed.pattern.v1', JSON.stringify(data.pattern))
+      usePatternStore.setState({ pattern: data.pattern })
+      useTakesStore.setState({ takes: data.takes })
+      useDiagnosticsStore.setState({ enabled: data.diagnostics.enabled, sessions: data.diagnostics.sessions })
       setImportText('')
-      setDataMessage('Your progress, controller setup, and saved pattern are ready.')
+      setDataMessage('Your progress, setup, beat, takes, and diagnostics are ready.')
     } catch {
       setDataMessage('That doesn’t look like a Woodshed export. Check the text and try again.')
     }
@@ -147,17 +145,21 @@ export function Settings() {
     <div className="page-title"><div><p className="eyebrow">Make it yours</p><h1>Settings</h1></div></div>
     <div className="settings-list">
       <article className="setting-card">
-        <div><h2>Your controller</h2><p>{calibrating ? `${calibrating === 'pads' ? 'Press each pad' : 'Turn each knob'} in order — ${calCount} of 8 learned.` : 'Teach Woodshed your pad and knob layout again at any time.'}</p></div>
-        <div className="setting-actions"><button className="button secondary" onClick={() => beginCalibration('pads')}>Recalibrate pads</button><button className="button secondary" onClick={() => beginCalibration('knobs')}>Recalibrate knobs</button></div>
+        <div><h2>Your controller</h2><p>{calibrating ? calibrating === 'pads' ? `Press each pad in order — ${calCount} of 8 learned.` : calibrating === 'knobs' ? `Turn each knob in order — ${calCount} of 8 learned.` : calibrating === 'keys' ? 'Press one piano key to learn its MIDI channel.' : 'Move only the mod wheel to learn its controller number.' : 'Teach Woodshed your pad, knob, key-channel, and mod-wheel layout again at any time.'}</p></div>
+        <div className="setting-actions"><button className="button secondary" onClick={() => beginCalibration('pads')}>Recalibrate pads</button><button className="button secondary" onClick={() => beginCalibration('knobs')}>Recalibrate knobs</button><button className="button secondary" onClick={() => beginCalibration('keys')}>Learn key channel</button><button className="button secondary" onClick={() => beginCalibration('mod')}>Learn mod wheel</button></div>
       </article>
       <article className="setting-card">
         <div><h2>Demo mode</h2><p>Use the on-screen controller when your MPK isn’t nearby.</p></div>
         <button className={`toggle ${status === 'demo' ? 'on' : ''}`} role="switch" aria-checked={status === 'demo'} onClick={() => setDemoMode(status !== 'demo')}><i/></button>
       </article>
+      <article className="setting-card">
+        <div><h2>Woodshed audio</h2><p>Mute Woodshed’s synth and drums when monitoring another app. GarageBand lessons mute Woodshed automatically.</p></div>
+        <button className={`toggle ${audioEnabled ? 'on' : ''}`} role="switch" aria-label="Woodshed audio" aria-checked={audioEnabled} onClick={() => setAudioEnabled(!audioEnabled)}><i/></button>
+      </article>
       <article className="setting-card data-card">
         <div className="data-copy">
           <h2>Your data</h2>
-          <p>Keep a portable copy of your lesson progress, controller setup, and saved beat.</p>
+          <p>Keep a versioned portable copy of your lesson progress, controller setup, saved beat, takes, and diagnostics.</p>
           {dataMessage && <p className="data-message" role="status">{dataMessage}</p>}
           <details className="import-details">
             <summary>Import a previous export</summary>
@@ -187,7 +189,7 @@ export function Settings() {
         <div><h2>Start fresh</h2><p>Clear lesson completions and your practice history. Your controller setup stays put.</p></div>
         {confirm ? <div className="confirm-row"><span>Are you sure?</span><button className="button primary" onClick={() => { resetProgress(); setConfirm(false) }}>Reset progress</button><button className="text-button" onClick={() => setConfirm(false)}>Cancel</button></div> : <button className="button secondary" onClick={() => setConfirm(true)}>Reset progress</button>}
       </article>
-      <details className="developer-details"><summary>Developer details</summary><div className="monitor"><div><span>Live MIDI monitor</span><small>Raw messages appear only here.</small></div>{raw.length ? raw.map((line, index) => <code key={`${line.time}-${index}`}>{line.time} · {line.message.type} · [{line.bytes.join(', ')}] · {JSON.stringify(line.message)}</code>) : <p>Move a hardware control to see its raw message.</p>}</div></details>
+      <details className="developer-details"><summary>Developer details</summary><div className="monitor"><div><span>Build {__BUILD_SHA__}</span><small>Raw messages and source-port identity appear only here.</small></div>{raw.length ? raw.map((line, index) => <code key={`${line.time}-${index}`}>{line.time} · {line.port ?? 'unknown port'} · {line.message.type} · [{line.bytes.join(', ')}] · {JSON.stringify(line.message)}</code>) : <p>Move a hardware control to see its raw message.</p>}</div></details>
     </div>
   </section>
 }

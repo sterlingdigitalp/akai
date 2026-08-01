@@ -1,7 +1,7 @@
 import { connectDelaySend, getEngine } from './engine'
 
 export type SynthParam = 'cutoff' | 'resonance' | 'attack' | 'release' | 'delaySend'
-type Voice = { oscillators: OscillatorNode[]; amp: GainNode; filter: BiquadFilterNode; modGain: GainNode; frequency: number }
+type Voice = { oscillators: OscillatorNode[]; amp: GainNode; filter: BiquadFilterNode; modGain: GainNode; frequency: number; safetyTimer: number }
 const params: Record<SynthParam, number> = { cutoff: .55, resonance: .22, attack: .12, release: .36, delaySend: .18 }
 const voices = new Map<number, Voice>()
 let modDepth = 0
@@ -13,6 +13,7 @@ export const SYNTH_PRESETS = {
 } satisfies Record<string, Record<SynthParam, number>>
 
 export function setParam(name: SynthParam, value: number) { params[name] = Math.max(0, Math.min(1, value)) }
+export function getParam(name: SynthParam) { return params[name] }
 export function setPreset(name: keyof typeof SYNTH_PRESETS) { Object.entries(SYNTH_PRESETS[name]).forEach(([key, value]) => setParam(key as SynthParam, value)) }
 export function setModDepth(value: number) {
   modDepth = Math.max(0, Math.min(1, value))
@@ -37,10 +38,17 @@ export function noteOn(note: number, velocity = .75) {
   const oscillators = (['sawtooth', 'square'] as OscillatorType[]).map((type, index) => { const osc = context.createOscillator(); osc.type = type; osc.frequency.value = frequency; osc.detune.value = bendCents + (index ? 7 : -4); const mix = context.createGain(); mix.gain.value = index ? .34 : .55; osc.connect(mix).connect(filter); osc.start(); return osc })
   const modGain = context.createGain(); modGain.gain.value = frequency * modDepth * .012; lfo.connect(modGain); oscillators.forEach((oscillator) => modGain.connect(oscillator.frequency))
   filter.connect(amp).connect(master); connectDelaySend(amp, params.delaySend)
-  voices.set(note, { oscillators, amp, filter, modGain, frequency })
+  const safetyTimer = window.setTimeout(() => noteOff(note), 30000)
+  voices.set(note, { oscillators, amp, filter, modGain, frequency, safetyTimer })
 }
 export function noteOff(note: number) {
   const voice = voices.get(note); if (!voice) return
+  window.clearTimeout(voice.safetyTimer)
   const { context, lfo } = getEngine(); const now = context.currentTime; const end = now + .06 + params.release * 1.8
   voice.amp.gain.cancelScheduledValues(now); voice.amp.gain.setTargetAtTime(.0001, now, Math.max(.02, params.release * .3)); voice.oscillators.forEach((osc) => osc.stop(end + .1)); lfo.disconnect(voice.modGain); voice.modGain.disconnect(); voices.delete(note)
+}
+export function allNotesOff() {
+  ;[...voices.keys()].forEach(noteOff)
+  setPitchBend(.5)
+  setModDepth(0)
 }

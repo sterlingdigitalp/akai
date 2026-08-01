@@ -4,3 +4,4 @@ interface MIDIInput { id: string; name?: string; state: 'connected' | 'disconnec
 interface MIDIInputMap { values(): IterableIterator<MIDIInput> }
 interface MIDIAccess { inputs: MIDIInputMap; onstatechange: ((event: MIDIConnectionEvent) => void) | null }
 interface Navigator { requestMIDIAccess?: () => Promise<MIDIAccess> }
+declare const __BUILD_SHA__: string

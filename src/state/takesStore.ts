@@ -2,8 +2,9 @@ import { create } from 'zustand'
 import { createJSONStorage, persist } from 'zustand/middleware'
 import type { Take } from '../audio/recorder'
 import { woodshedStorage } from './storage'
+import { parseTakes } from './dataSchema'
 
-const MAX_TAKES = 12
+export const MAX_TAKES = 12
 type TakesState = {
   takes: Take[]
   addTake: (take: Take) => void
@@ -15,4 +16,14 @@ export const useTakesStore = create<TakesState>()(persist((set) => ({
   addTake: (take) => set((s) => ({ takes: [take, ...s.takes].slice(0, MAX_TAKES) })),
   removeTake: (id) => set((s) => ({ takes: s.takes.filter((take) => take.id !== id) })),
   renameTake: (id, name) => set((s) => ({ takes: s.takes.map((take) => take.id === id ? { ...take, name } : take) })),
-}), { name: 'woodshed.takes.v1', storage: createJSONStorage(() => woodshedStorage) }))
+}), {
+  name: 'woodshed.takes.v1',
+  version: 2,
+  storage: createJSONStorage(() => woodshedStorage),
+  migrate: (persisted) => persisted as TakesState,
+  merge: (persisted, current) => {
+    const candidate = persisted as Partial<TakesState> | undefined
+    const takes = parseTakes(candidate?.takes)
+    return takes ? { ...current, takes } : current
+  },
+}))
