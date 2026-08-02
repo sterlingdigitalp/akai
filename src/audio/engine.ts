@@ -60,7 +60,7 @@ export function connectDelaySend(source: AudioNode, amount: number) {
 export function setEngineParam(name: EngineParam, value: number) {
   const engine = getEngine()
   const normalized = Math.max(0, Math.min(1, value))
-  if (name === 'master') engine.master.gain.setTargetAtTime(.15 + normalized * .85, engine.context.currentTime, .02)
+  if (name === 'master') engine.master.gain.setTargetAtTime(.55 + normalized * .45, engine.context.currentTime, .02)
   if (name === 'delayTime') delay!.delayTime.setTargetAtTime(.06 + normalized * .64, engine.context.currentTime, .02)
   if (name === 'feedback') feedback!.gain.setTargetAtTime(.05 + normalized * .62, engine.context.currentTime, .02)
 }
