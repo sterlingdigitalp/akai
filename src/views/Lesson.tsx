@@ -57,6 +57,7 @@ export function LessonView() {
   }, [step, learnPad, learnKnob, completeStep, lesson.id])
   const backingPhrase = lesson.id === 'sound' || (lesson.id === 'signature-sound' && step.goal.type === 'gesture')
   const beatTimers = useRef<Set<number>>(new Set())
+  const patternGrid = useRef<boolean[][] | null>(null)
   useEffect(() => {
     if (!backingPhrase) return
     const timers = beatTimers.current
@@ -75,14 +76,13 @@ export function LessonView() {
   }, [index])
   const skip = () => { outcomeRef.current = step.goal.type === 'confirm' ? 'confirmed' : 'skipped'; completeStep(lesson.id, step.id); setJustDone(true) }
   const playBeat = () => {
-    const sixteenth = 60000 / 90 / 4
-    for (let s = 0; s < 16; s++) {
-      const at = s * sixteenth
-      if ([0, 8].includes(s)) beatTimers.current.add(window.setTimeout(() => trigger(0, .82), at))
-      if ([4, 12].includes(s)) beatTimers.current.add(window.setTimeout(() => trigger(1, .76), at))
-      if (s % 2 === 0) beatTimers.current.add(window.setTimeout(() => trigger(2, .54), at))
-    }
-    const doneTimer = window.setTimeout(() => { beatTimers.current.clear(); outcomeRef.current = 'confirmed'; completeStep(lesson.id, step.id); setJustDone(true) }, 16 * sixteenth)
+    beatTimers.current.forEach(clearTimeout); beatTimers.current.clear()
+    const built = patternGrid.current
+    const rows = built && built.some((row) => row.some(Boolean)) ? built : [[0, 8], [4, 12], [0, 2, 4, 6, 8, 10, 12, 14]].map((hits) => Array.from({ length: 16 }, (_, s) => hits.includes(s)))
+    const velocities = [.82, .76, .54]
+    const sixteenth = 60000 / 90 / 4; const bars = 2
+    for (let bar = 0; bar < bars; bar++) for (let s = 0; s < 16; s++) { const at = (bar * 16 + s) * sixteenth; rows.forEach((row, voice) => { if (row[s]) beatTimers.current.add(window.setTimeout(() => trigger(voice, velocities[voice] ?? .7), at)) }) }
+    const doneTimer = window.setTimeout(() => { beatTimers.current.clear(); outcomeRef.current = 'confirmed'; completeStep(lesson.id, step.id); setJustDone(true) }, bars * 16 * sixteenth)
     beatTimers.current.add(doneTimer)
   }
   const next = () => { if (!saved?.completedSteps.includes(step.id)) completeStep(lesson.id, step.id, index === lesson.steps.length - 1); if (index < lesson.steps.length - 1) setIndex(index + 1); else go('home') }
@@ -91,7 +91,7 @@ export function LessonView() {
   const parts = step.goal.type === 'mix' ? mixParts(step.goal, detector.events, now) : []
   const liveProgress = step.goal.type === 'mix' ? (parts.length ? Math.min(1, ...parts.map((part) => part.ratio)) : 0) : detector.progress
   const garageBandLesson = lesson.id === 'daw' || lesson.id === 'live-set'
-  return <section className="lesson-view"><button className="back-link" onClick={() => go('home')}>← Lesson path</button>{garageBandLesson && <div className="daw-isolation" role="status"><strong>GarageBand monitor mode:</strong> Woodshed’s synth and drums are muted, so only GarageBand can confirm its audio.</div>}<div className="lesson-meta"><span>Lesson {lesson.number}</span><span>{index + 1} / {lesson.steps.length}</span></div><article className={`instruction-card ${done ? 'is-complete' : ''}`}><div className="step-check">{done ? '✓' : index + 1}</div><div className="instruction-copy"><p className="eyebrow">{lesson.title}</p><h1>{step.title}</h1><p className="lead">{step.instruction}</p>{step.hint && <details><summary>Need a hint?</summary><p>{step.hint}</p></details>}{step.recap && <div className="recap-list">{step.recap.map((point) => <span key={point}>✓ {point}</span>)}</div>}</div><div className="step-actions">{index > 0 && <button className="text-button" onClick={() => setIndex(index - 1)}>← Previous</button>}{!done && !isRecap && (step.goal.type === 'confirm' ? <button className="button secondary" onClick={skip}>✓ {step.confirm}</button> : <button className="text-button" onClick={skip}>{step.goal.type === 'calibrate' ? 'Use defaults' : 'Skip for now'}</button>)}{step.id === 'play' && !done && <button className="button secondary" onClick={playBeat}>▶ Play your beat</button>}<button className="button primary" disabled={!done} onClick={next}>{index === lesson.steps.length - 1 ? 'Finish lesson' : 'Next move'} <span>→</span></button></div>{justDone && <div className="particles" aria-hidden="true">✦ · ✦ · ✦</div>}</article><div className="progress-track" aria-label={`${Math.round(done ? 100 : liveProgress * 100)}% complete`}><i style={{ width: `${done ? 100 : liveProgress * 100}%` }}/></div>{step.goal.type === 'mix' && !done && <MixMeter parts={parts} withinMs={step.goal.withinMs} now={now}/>}{step.goal.type === 'timing' && <Metronome bpm={step.goal.bpm}/>} {step.goal.type === 'pattern' ? <LessonPattern onChange={(grid) => handleEvent({ kind: 'pattern', grid, ts: performance.now() })}/> : <DeviceView highlight={step.highlight}/>}</section>
+  return <section className="lesson-view"><button className="back-link" onClick={() => go('home')}>← Lesson path</button>{garageBandLesson && <div className="daw-isolation" role="status"><strong>GarageBand monitor mode:</strong> Woodshed’s synth and drums are muted, so only GarageBand can confirm its audio.</div>}<div className="lesson-meta"><span>Lesson {lesson.number}</span><span>{index + 1} / {lesson.steps.length}</span></div><article className={`instruction-card ${done ? 'is-complete' : ''}`}><div className="step-check">{done ? '✓' : index + 1}</div><div className="instruction-copy"><p className="eyebrow">{lesson.title}</p><h1>{step.title}</h1><p className="lead">{step.instruction}</p>{step.hint && <details><summary>Need a hint?</summary><p>{step.hint}</p></details>}{step.recap && <div className="recap-list">{step.recap.map((point) => <span key={point}>✓ {point}</span>)}</div>}</div><div className="step-actions">{index > 0 && <button className="text-button" onClick={() => setIndex(index - 1)}>← Previous</button>}{!done && !isRecap && (step.goal.type === 'confirm' ? <button className="button secondary" onClick={skip}>✓ {step.confirm}</button> : <button className="text-button" onClick={skip}>{step.goal.type === 'calibrate' ? 'Use defaults' : 'Skip for now'}</button>)}{step.id === 'play' && <button className="button secondary" onClick={playBeat}>▶ Play your beat</button>}<button className="button primary" disabled={!done} onClick={next}>{index === lesson.steps.length - 1 ? 'Finish lesson' : 'Next move'} <span>→</span></button></div>{justDone && <div className="particles" aria-hidden="true">✦ · ✦ · ✦</div>}</article><div className="progress-track" aria-label={`${Math.round(done ? 100 : liveProgress * 100)}% complete`}><i style={{ width: `${done ? 100 : liveProgress * 100}%` }}/></div>{step.goal.type === 'mix' && !done && <MixMeter parts={parts} withinMs={step.goal.withinMs} now={now}/>}{step.goal.type === 'timing' && <Metronome bpm={step.goal.bpm}/>} {step.goal.type === 'pattern' ? <LessonPattern onChange={(grid) => { patternGrid.current = grid; handleEvent({ kind: 'pattern', grid, ts: performance.now() }) }}/> : <DeviceView highlight={step.highlight}/>}</section>
 }
 
 function useTick(active: boolean) {
@@ -134,6 +134,6 @@ function Metronome({ bpm }: { bpm: number }) {
 const PATTERN_TARGETS = [[0, 8], [4, 12], [0, 2, 4, 6, 8, 10, 12, 14]]
 function LessonPattern({ onChange }: { onChange: (grid: boolean[][]) => void }) {
   const [grid, setGrid] = useState(() => Array.from({ length: 3 }, () => Array(16).fill(false) as boolean[])); const names = ['Kick', 'Snare', 'Closed hat']
-  const toggle = (rowIndex: number, stepIndex: number) => setGrid((old) => { const next = old.map((row) => [...row]); next[rowIndex]![stepIndex] = !next[rowIndex]![stepIndex]; queueMicrotask(() => onChange(next)); return next })
+  const toggle = (rowIndex: number, stepIndex: number) => setGrid((old) => { const next = old.map((row) => [...row]); const on = !next[rowIndex]![stepIndex]; next[rowIndex]![stepIndex] = on; if (on) trigger(rowIndex, [.82, .76, .54][rowIndex] ?? .7); queueMicrotask(() => onChange(next)); return next })
   return <div className="sequencer-card lesson-pattern"><div className="beat-count"><span/>{Array.from({ length: 16 }, (_, i) => <b key={i}>{i % 4 === 0 ? i / 4 + 1 : '·'}</b>)}</div>{grid.map((row, r) => <div className="seq-row" key={names[r]}><span className="voice-trigger">{names[r]}</span>{row.map((active, s) => { const target = PATTERN_TARGETS[r]!.includes(s); return <button key={s} className={`step-cell ${active ? 'active' : ''} ${target && !active ? 'target' : ''}`} onClick={() => toggle(r, s)} aria-label={`${names[r]}, step ${s + 1}${target ? ', suggested' : ''}`}/> })}</div>)}</div>
 }
