@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { demoControl } from '../../midi/demo'
 import type { ControlKind } from '../../midi/types'
 import { useMidiStore } from '../../state/midiStore'
@@ -47,12 +47,15 @@ export function DeviceView({ highlight }: { highlight?: string }) {
   const wheels = useMidiStore((state) => state.wheels)
   const [dragKnob, setDragKnob] = useState<number | null>(null)
   const lastY = useRef(0)
-  const visibleStart = useMemo(() => {
+  // Sticky octave window: slide the on-screen keyboard to follow your hand, but only when a note
+  // falls outside the visible 25 keys — and never snap back when you release. Keeps the octave
+  // lessons from jumping the whole layout around on every press and release.
+  const [visibleStart, setVisibleStart] = useState(48)
+  useEffect(() => {
     const notes = [...held]
-    if (!notes.length) return 48
-    const latest = notes[notes.length - 1] ?? 60
-    if (latest < 48 || latest > 72) return Math.max(0, Math.floor((latest - 12) / 12) * 12)
-    return 48
+    if (!notes.length) return
+    const latest = notes[notes.length - 1]!
+    setVisibleStart((start) => (latest >= start && latest <= start + 24) ? start : Math.max(0, Math.floor((latest - 12) / 12) * 12))
   }, [held])
   const notes = Array.from({ length: 25 }, (_, index) => visibleStart + index)
   const whites = notes.filter((note) => !isBlack(note))
