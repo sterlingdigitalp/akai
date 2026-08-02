@@ -11,7 +11,7 @@ export function getEngine(): AudioEngine {
   if (!context) {
     context = new AudioContext()
     master = context.createGain()
-    master.gain.value = 0.72
+    master.gain.value = 0.82
     const compressor = context.createDynamicsCompressor()
     compressor.threshold.value = -10
     compressor.ratio.value = 5

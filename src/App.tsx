@@ -23,7 +23,8 @@ function AudioBridge() {
     }
     if (event.kind === 'pad' && event.on !== false) trigger(event.index, event.value)
     if (event.kind === 'knob' && event.index < 5) setParam((['cutoff', 'resonance', 'release', 'delaySend', 'attack'] as const)[event.index]!, event.value)
-    if (event.kind === 'knob' && event.index >= 5) setEngineParam((['master', 'delayTime', 'feedback'] as const)[event.index - 5]!, event.value)
+    // Master volume is deliberately NOT on a knob — an unlabeled knob turned down during calibration once near-muted the whole app.
+    if (event.kind === 'knob' && event.index >= 6) setEngineParam((['delayTime', 'feedback'] as const)[event.index - 6]!, event.value)
     if (event.kind === 'pitch') setPitchBend(event.value)
     if (event.kind === 'mod') setModDepth(event.value)
   }), [])
